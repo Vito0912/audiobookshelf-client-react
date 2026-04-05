@@ -27,10 +27,19 @@ jobs:
           ref: personal
           path: .
 
+      - name: Check original audiobookshelf client
+        uses: actions/checkout@v6
+        with:
+          repository: advplyr/audiobookshelf
+          path: client-vue
+
       - name: Check out React client
         uses: actions/checkout@v6
         with:
           path: client-react
+
+      - name: Copy client
+        run: mv client-vue/client .
 
       - name: Docker meta
         id: meta
