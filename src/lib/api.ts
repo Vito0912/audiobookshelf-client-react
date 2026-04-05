@@ -48,6 +48,7 @@ import {
   SearchLibraryResponse,
   Series,
   ServerStatus,
+  StartItemTranscriptionPayload,
   TasksResponse,
   UpdateAuthorPayload,
   UpdateLibraryItemMediaPayload,
@@ -815,6 +816,16 @@ export async function clearPodcastDownloadQueue(libraryItemId: string): Promise<
 export async function embedMetadataQuick(libraryItemId: string): Promise<void> {
   return apiRequest<void>(`/api/tools/item/${libraryItemId}/embed-metadata`, {
     method: 'POST'
+  })
+}
+
+/**
+ * Start an audiobook transcription task that generates a WebVTT subtitle file.
+ */
+export async function startItemTranscription(libraryItemId: string, payload: StartItemTranscriptionPayload): Promise<void> {
+  return apiRequest<void>(`/api/tools/item/${libraryItemId}/transcribe`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
   })
 }
 

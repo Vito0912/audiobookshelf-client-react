@@ -48,6 +48,26 @@ export default function PlayerSettingsModal({ isOpen, settings, onClose, onUpdat
     onUpdateSettings({ playbackRateIncrementDecrement: value as 0.1 | 0.05 })
   }
 
+  const handleSubtitleEnabledChange = (value: boolean) => {
+    onUpdateSettings({ subtitleEnabled: value })
+  }
+
+  const handleSubtitleSpeakerColorsChange = (value: boolean) => {
+    onUpdateSettings({ subtitleSpeakerColors: value })
+  }
+
+  const handleSubtitleWordHighlightChange = (value: boolean) => {
+    onUpdateSettings({ subtitleWordHighlight: value })
+  }
+
+  const handleSubtitleContinuousReaderModeChange = (value: boolean) => {
+    onUpdateSettings({ subtitleContinuousReaderMode: value })
+  }
+
+  const handleSubtitleFixedSizeModeChange = (value: boolean) => {
+    onUpdateSettings({ subtitleFixedSizeMode: value })
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="sm:max-w-md md:max-w-md lg:max-w-md">
       <div className="flex flex-col gap-6 p-6">
@@ -76,6 +96,36 @@ export default function PlayerSettingsModal({ isOpen, settings, onClose, onUpdat
             items={PLAYBACK_RATE_INCREMENT_VALUES}
             onChange={handlePlaybackRateIncrementChange}
             usePortal
+          />
+
+          <ToggleSwitch value={settings.subtitleEnabled} label={t('LabelShowSubtitles')} onChange={handleSubtitleEnabledChange} />
+
+          <ToggleSwitch
+            value={settings.subtitleSpeakerColors}
+            label={t('LabelSubtitleSpeakerColors')}
+            onChange={handleSubtitleSpeakerColorsChange}
+            disabled={!settings.subtitleEnabled}
+          />
+
+          <ToggleSwitch
+            value={settings.subtitleWordHighlight}
+            label={t('LabelSubtitleWordHighlight')}
+            onChange={handleSubtitleWordHighlightChange}
+            disabled={!settings.subtitleEnabled}
+          />
+
+          <ToggleSwitch
+            value={settings.subtitleContinuousReaderMode}
+            label={t('LabelSubtitleContinuousReaderMode')}
+            onChange={handleSubtitleContinuousReaderModeChange}
+            disabled={!settings.subtitleEnabled}
+          />
+
+          <ToggleSwitch
+            value={settings.subtitleFixedSizeMode}
+            label={t('LabelSubtitleFixedSizeMode')}
+            onChange={handleSubtitleFixedSizeModeChange}
+            disabled={!settings.subtitleEnabled}
           />
         </div>
       </div>

@@ -13,6 +13,16 @@ export interface PlayerSettings {
   playbackRateIncrementDecrement: 0.1 | 0.05
   /** Current volume level (0-1) */
   volume: number
+  /** Enable floating subtitle overlay in player */
+  subtitleEnabled: boolean
+  /** Color subtitle text by detected speaker tags */
+  subtitleSpeakerColors: boolean
+  /** Highlight the current word as playback advances */
+  subtitleWordHighlight: boolean
+  /** Show subtitles in continuous reading mode */
+  subtitleContinuousReaderMode: boolean
+  /** Use a fixed subtitle panel size that can be resized */
+  subtitleFixedSizeMode: boolean
 }
 
 export interface UsePlayerSettingsReturn {
@@ -46,7 +56,12 @@ const DEFAULT_SETTINGS: PlayerSettings = {
   jumpBackwardAmount: 10,
   playbackRate: 1.0,
   playbackRateIncrementDecrement: 0.1,
-  volume: 0.5
+  volume: 0.5,
+  subtitleEnabled: true,
+  subtitleSpeakerColors: true,
+  subtitleWordHighlight: true,
+  subtitleContinuousReaderMode: false,
+  subtitleFixedSizeMode: false
 }
 
 // Playback rate bounds
@@ -78,7 +93,13 @@ function loadSettingsFromStorage(): PlayerSettings {
       playbackRateIncrementDecrement:
         parsed.playbackRateIncrementDecrement === 0.05 || parsed.playbackRateIncrementDecrement === 0.1
           ? parsed.playbackRateIncrementDecrement
-          : DEFAULT_SETTINGS.playbackRateIncrementDecrement
+          : DEFAULT_SETTINGS.playbackRateIncrementDecrement,
+      subtitleEnabled: typeof parsed.subtitleEnabled === 'boolean' ? parsed.subtitleEnabled : DEFAULT_SETTINGS.subtitleEnabled,
+      subtitleSpeakerColors: typeof parsed.subtitleSpeakerColors === 'boolean' ? parsed.subtitleSpeakerColors : DEFAULT_SETTINGS.subtitleSpeakerColors,
+      subtitleWordHighlight: typeof parsed.subtitleWordHighlight === 'boolean' ? parsed.subtitleWordHighlight : DEFAULT_SETTINGS.subtitleWordHighlight,
+      subtitleContinuousReaderMode:
+        typeof parsed.subtitleContinuousReaderMode === 'boolean' ? parsed.subtitleContinuousReaderMode : DEFAULT_SETTINGS.subtitleContinuousReaderMode,
+      subtitleFixedSizeMode: typeof parsed.subtitleFixedSizeMode === 'boolean' ? parsed.subtitleFixedSizeMode : DEFAULT_SETTINGS.subtitleFixedSizeMode
     }
   } catch (error) {
     console.error('[usePlayerSettings] Failed to load settings from localStorage:', error)
