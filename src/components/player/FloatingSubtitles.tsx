@@ -41,13 +41,14 @@ interface ResizeState {
   startClientY: number
   startWidth: number
   startHeight: number
-  startY: number
+  startPanelLeft: number
+  startPanelTop: number
 }
 
 const POSITION_STORAGE_KEY = 'absPlayerFloatingSubtitlePosition'
 const SIZE_STORAGE_KEY = 'absPlayerFloatingSubtitleSize'
 const DEFAULT_POSITION: OverlayPosition = { x: 0, y: 0 }
-const DEFAULT_SIZE: OverlaySize = { width: 920, height: 340 }
+const DEFAULT_SIZE: OverlaySize = { width: 400, height: 50 }
 
 const MIN_WIDTH = 240
 const MIN_HEIGHT = 50
@@ -128,7 +129,6 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
         y: parsed.y
       })
     } catch {
-      // Ignore malformed values and keep defaults.
     }
   }, [])
 
@@ -161,7 +161,6 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
         height: Math.max(MIN_HEIGHT, Math.round(parsed.height))
       })
     } catch {
-      // Ignore malformed values and keep defaults.
     }
   }, [])
 
@@ -292,6 +291,13 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
 
     event.preventDefault()
 
+    const panel = panelRef.current
+    if (!panel) {
+      return
+    }
+
+    const panelRect = panel.getBoundingClientRect()
+
     event.currentTarget.setPointerCapture(event.pointerId)
 
     resizeStateRef.current = {
@@ -300,7 +306,8 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
       startClientY: event.clientY,
       startWidth: overlaySize.width,
       startHeight: overlaySize.height,
-      startY: overlayPosition.y
+      startPanelLeft: panelRect.left,
+      startPanelTop: panelRect.top
     }
 
     setIsResizing(true)
@@ -315,26 +322,18 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
     const deltaX = event.clientX - resizeState.startClientX
     const deltaY = event.clientY - resizeState.startClientY
 
-    const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - VIEWPORT_MARGIN * 2)
-    const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - VIEWPORT_MARGIN * 2)
+    const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - VIEWPORT_MARGIN - resizeState.startPanelLeft)
+    const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - VIEWPORT_MARGIN - resizeState.startPanelTop)
 
     const nextWidth = resizeState.startWidth + deltaX
     const nextHeight = resizeState.startHeight - deltaY
 
     const clampedWidth = clampValue(Math.round(nextWidth), MIN_WIDTH, maxWidth)
     const clampedHeight = clampValue(Math.round(nextHeight), MIN_HEIGHT, maxHeight)
-    const fixedBottom = resizeState.startY + resizeState.startHeight
-    const nextY = fixedBottom - clampedHeight
-
     setOverlaySize({
       width: clampedWidth,
       height: clampedHeight
     })
-
-    setOverlayPosition((previousValue) => ({
-      ...previousValue,
-      y: nextY
-    }))
   }
 
   const handleResizeEnd = (event: PointerEvent<HTMLDivElement>) => {
