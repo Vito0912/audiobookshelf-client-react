@@ -3,6 +3,7 @@
 import MatchModal from '@/components/modals/MatchModal'
 import RssFeedOpenCloseModal from '@/components/modals/RssFeedOpenCloseModal'
 import ShareModal from '@/components/modals/ShareModal'
+import TranscribeModal from '@/components/modals/TranscribeModal'
 import ConfirmDialog from '@/components/widgets/ConfirmDialog'
 import MediaCardCover from '@/components/widgets/media-card/MediaCardCover'
 import MediaCardDetailView from '@/components/widgets/media-card/MediaCardDetailView'
@@ -247,11 +248,13 @@ function MediaCard(props: MediaCardProps) {
     rssFeedModalOpen,
     shareModalOpen,
     matchModalOpen,
+    transcribeModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
     closeMatchModal,
+    closeTranscribeModal,
     handleShareChange,
     handlePlay,
     handleReadEBook,
@@ -402,6 +405,7 @@ function MediaCard(props: MediaCardProps) {
         libraryItem={libraryItem as BookLibraryItem | PodcastLibraryItem}
         bookCoverAspectRatio={bookCoverAspectRatio ?? 1}
       />
+      <TranscribeModal isOpen={transcribeModalOpen} onClose={closeTranscribeModal} libraryItemId={libraryItem.id} itemTitle={title} />
     </>
   )
 }
