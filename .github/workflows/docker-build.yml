@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tags:
-        description: 'Docker Tag'
+        description: "Docker Tag"
         required: false
         default: 'personal'
 
@@ -54,13 +54,16 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Apply dual-client patch to audiobookshelf server
+        run: git apply client-react/dual-client-port.patch
+
       - name: Copy Dockerfile from React client
         run: cp client-react/Dockerfile ./Dockerfile
 
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          tags: ${{ github.event.inputs.tags || steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           context: .
           platforms: linux/amd64
