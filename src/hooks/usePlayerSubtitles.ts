@@ -5,12 +5,13 @@ import { parseWebVtt, selectPreferredSubtitleFile, type ParsedSubtitleCue, type 
 import type { LibraryItem } from '@/types/api'
 import { PlayerState } from '@/types/api'
 
-const LONG_PAUSE_PARAGRAPH_GAP_SECONDS = 2
+const LONG_PAUSE_PARAGRAPH_GAP_SECONDS = 1.2
 const WORD_STICKY_GAP_SECONDS = 0.35
-const CONTINUOUS_PARAGRAPH_WINDOW_BEFORE = 2
-const CONTINUOUS_PARAGRAPH_WINDOW_AFTER = 1
-const PARAGRAPH_WORD_SOFT_LIMIT = 1000
-const PARAGRAPH_WORD_HARD_LIMIT = 1200
+const CONTINUOUS_PARAGRAPH_WINDOW_BEFORE = 3
+const CONTINUOUS_PARAGRAPH_WINDOW_AFTER = 3
+const PARAGRAPH_WORD_SOFT_LIMIT = 200
+const PARAGRAPH_WORD_HARD_LIMIT = 300
+const PARAGRAPH_WORD_MIN_LIMIT = 0
 
 const SPEAKER_COLOR_PALETTE = ['#93c5fd', '#f9a8d4', '#fcd34d', '#86efac', '#a5b4fc', '#fca5a5', '#67e8f9', '#d8b4fe', '#fda4af', '#bef264']
 
@@ -184,7 +185,7 @@ function buildParagraphs(words: ParsedSubtitleWord[], pauseThresholdSeconds: num
     const currentWord = words[i]
 
     const pause = currentWord.start - previousWord.end
-    if (pause > pauseThresholdSeconds) {
+    if (pause > pauseThresholdSeconds && i - paragraphStartIndex >= PARAGRAPH_WORD_MIN_LIMIT) {
       finalizeParagraph(i - 1)
       continue
     }

@@ -99,8 +99,47 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
   const dragStateRef = useRef<DragState | null>(null)
   const resizeStateRef = useRef<ResizeState | null>(null)
 
-  const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>(DEFAULT_POSITION)
-  const [overlaySize, setOverlaySize] = useState<OverlaySize>(DEFAULT_SIZE)
+  const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_POSITION
+    }
+
+    try {
+      const stored = localStorage.getItem(POSITION_STORAGE_KEY)
+      if (!stored) return DEFAULT_POSITION
+
+      const parsed = JSON.parse(stored) as Partial<OverlayPosition>
+      if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return DEFAULT_POSITION
+
+      return {
+        x: parsed.x,
+        y: parsed.y
+      }
+    } catch {
+      return DEFAULT_POSITION
+    }
+  })
+
+  const [overlaySize, setOverlaySize] = useState<OverlaySize>(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_SIZE
+    }
+
+    try {
+      const stored = localStorage.getItem(SIZE_STORAGE_KEY)
+      if (!stored) return DEFAULT_SIZE
+
+      const parsed = JSON.parse(stored) as Partial<OverlaySize>
+      if (typeof parsed.width !== 'number' || typeof parsed.height !== 'number') return DEFAULT_SIZE
+
+      return {
+        width: Math.max(MIN_WIDTH, Math.round(parsed.width)),
+        height: Math.max(MIN_HEIGHT, Math.round(parsed.height))
+      }
+    } catch {
+      return DEFAULT_SIZE
+    }
+  })
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
 
@@ -108,29 +147,7 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
 
   const isContinuousMode = settings.subtitleContinuousReaderMode
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
 
-    try {
-      const stored = localStorage.getItem(POSITION_STORAGE_KEY)
-      if (!stored) {
-        return
-      }
-
-      const parsed = JSON.parse(stored) as Partial<OverlayPosition>
-      if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') {
-        return
-      }
-
-      setOverlayPosition({
-        x: parsed.x,
-        y: parsed.y
-      })
-    } catch {
-    }
-  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -140,29 +157,7 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
     localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(overlayPosition))
   }, [overlayPosition])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
 
-    try {
-      const stored = localStorage.getItem(SIZE_STORAGE_KEY)
-      if (!stored) {
-        return
-      }
-
-      const parsed = JSON.parse(stored) as Partial<OverlaySize>
-      if (typeof parsed.width !== 'number' || typeof parsed.height !== 'number') {
-        return
-      }
-
-      setOverlaySize({
-        width: Math.max(MIN_WIDTH, Math.round(parsed.width)),
-        height: Math.max(MIN_HEIGHT, Math.round(parsed.height))
-      })
-    } catch {
-    }
-  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -416,20 +411,8 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
     )
   }
 
-  if (status === 'loading') {
-    return (
-      <div className={mergeClasses('pointer-events-none flex justify-center', className)}>
-        <div className="pointer-events-auto rounded-xl border border-white/20 bg-black/40 px-4 py-2 text-sm text-white/90 shadow-xl backdrop-blur-md">{t('MessagePlayerSubtitlesLoading')}</div>
-      </div>
-    )
-  }
-
-  if (status === 'missing') {
-    return (
-      <div className={mergeClasses('pointer-events-none flex justify-center', className)}>
-        <div className="pointer-events-auto rounded-xl border border-white/20 bg-black/40 px-4 py-2 text-sm text-white/85 shadow-xl backdrop-blur-md">{t('MessagePlayerSubtitlesMissing')}</div>
-      </div>
-    )
+  if (status === 'missing' || status === 'loading') {
+    return null
   }
 
   if (status === 'error') {
@@ -516,7 +499,7 @@ export default function FloatingSubtitles({ settings, subtitles, className = '' 
               const paragraphWords = words.slice(paragraph.wordStartIndex, paragraph.wordEndIndex + 1)
 
               return (
-                <p key={paragraph.id} className="rounded-lg bg-transparent px-2 py-1">
+                <p key={paragraph.id} className="rounded-lg bg-transparent px-2 py-0.5">
                   {paragraphWords.map((word, wordIndex) => renderWord(word, wordIndex, wordIndex === paragraphWords.length - 1))}
                 </p>
               )
