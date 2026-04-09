@@ -3,6 +3,7 @@
 import MatchModal from '@/components/modals/MatchModal'
 import RssFeedOpenCloseModal from '@/components/modals/RssFeedOpenCloseModal'
 import ShareModal from '@/components/modals/ShareModal'
+import TranscribeModal from '@/components/modals/TranscribeModal'
 import Btn from '@/components/ui/Btn'
 import ContextMenuDropdown, { type ContextMenuDropdownItem } from '@/components/ui/ContextMenuDropdown'
 import IconBtn from '@/components/ui/IconBtn'
@@ -67,10 +68,13 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     confirmState,
     rssFeedModalOpen,
     shareModalOpen,
+    transcribeModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
+    closeMatchModal,
+    closeTranscribeModal,
     handleShareChange,
     handleReadEBook,
     handleMoreAction,
@@ -267,6 +271,12 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
         onShareChange={handleShareChange}
       />
       <MatchModal isOpen={matchModalOpen} onClose={() => setMatchModalOpen(false)} libraryItem={libraryItem} />
+      <TranscribeModal
+        isOpen={transcribeModalOpen}
+        onClose={closeTranscribeModal}
+        libraryItemId={libraryItem.id}
+        itemTitle={libraryItem.media.metadata.title ?? ''}
+      />
     </>
   )
 }

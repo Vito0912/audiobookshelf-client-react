@@ -74,6 +74,7 @@ export function useMediaCardActions({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [rssFeedModalOpen, setRssFeedModalOpen] = useState(false)
   const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [transcribeModalOpen, setTranscribeModalOpen] = useState(false)
   const [mediaItemShare, setMediaItemShare] = useState<MediaItemShare | null>(initialShare)
   const rssFeed = libraryItem.rssFeed ?? null
   const showRssFeedButton = userIsAdminOrUp || rssFeed != null
@@ -216,6 +217,8 @@ export function useMediaCardActions({
         setRssFeedModalOpen(true)
       } else if (action === 'showMatchModal') {
         onOpenMatch?.()
+      } else if (action === 'openTranscribeModal') {
+        setTranscribeModalOpen(true)
       } else if (action === 'download') {
         downloadLibraryItem(libraryItem.id)
       } else if (action === 'sendToDevice') {
@@ -362,6 +365,11 @@ export function useMediaCardActions({
         })
         if (userIsAdminOrUp) {
           items.push({
+            text: 'Transcribe Audio',
+            func: 'openTranscribeModal'
+          })
+
+          items.push({
             text: t('LabelShare'),
             func: 'openShare'
           })
@@ -472,6 +480,11 @@ export function useMediaCardActions({
     setShareModalOpen(false)
   }, [])
 
+
+  const closeTranscribeModal = useCallback(() => {
+    setTranscribeModalOpen(false)
+  }, [])
+
   const handleShareChange = useCallback(
     (share: MediaItemShare | null) => {
       setMediaItemShare(share)
@@ -486,10 +499,12 @@ export function useMediaCardActions({
     confirmState,
     rssFeedModalOpen,
     shareModalOpen,
+    transcribeModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
+    closeTranscribeModal,
     handleShareChange,
     handlePlay,
     handleReadEBook,

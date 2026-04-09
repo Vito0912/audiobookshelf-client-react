@@ -2,6 +2,7 @@
 
 import { useMediaContext } from '@/contexts/MediaContext'
 import { useAudioPlayerHotkeys } from '@/hooks/useAudioPlayerHotkeys'
+import { usePlayerSubtitles } from '@/hooks/usePlayerSubtitles'
 import { getLibraryItemCoverUrl } from '@/lib/coverUtils'
 import { secondsToTimestamp } from '@/lib/datefns'
 import { BookMedia } from '@/types/api'
@@ -9,6 +10,7 @@ import Link from 'next/link'
 import { Fragment } from 'react'
 import PreviewCover from '../covers/PreviewCover'
 import IconBtn from '../ui/IconBtn'
+import FloatingSubtitles from './FloatingSubtitles'
 import PlayerControls from './PlayerControls'
 import PlayerTrackBar from './PlayerTrackBar'
 
@@ -19,6 +21,15 @@ export default function MediaPlayerContainer() {
 
   // TODO: Set library in media context for streaming library item
   const coverAspectRatio = 1
+
+  const subtitles = usePlayerSubtitles({
+    libraryItem: streamLibraryItem,
+    currentTime: playerHandler.state.currentTime,
+    duration: playerHandler.state.duration,
+    playbackRate: playerHandler.state.settings.playbackRate,
+    playerState: playerHandler.state.playerState,
+    settings: playerHandler.state.settings
+  })
 
   // Don't render the player if nothing is streaming
   if (!streamLibraryItem) {
@@ -31,6 +42,8 @@ export default function MediaPlayerContainer() {
 
   return (
     <div className="bg-primary shadow-media-player fixed right-0 bottom-0 left-0 z-50 h-48 w-full px-2 pt-2 pb-1 lg:h-40 lg:px-4 lg:pb-4">
+      <FloatingSubtitles settings={playerHandler.state.settings} subtitles={subtitles} className="absolute bottom-full left-0 right-0 z-10 mb-3" />
+
       <div className="absolute top-2 left-2 flex gap-4 lg:left-4">
         <PreviewCover
           src={getLibraryItemCoverUrl(streamLibraryItem.id, streamLibraryItem.updatedAt)}
