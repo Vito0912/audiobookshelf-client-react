@@ -11,12 +11,11 @@ import ReadIconBtn from '@/components/ui/ReadIconBtn'
 import Tooltip from '@/components/ui/Tooltip'
 import ConfirmDialog from '@/components/widgets/ConfirmDialog'
 import { useMediaCardActions } from '@/components/widgets/media-card/useMediaCardActions'
-import { useLibrary } from '@/contexts/LibraryContext'
 import { useMediaContext } from '@/contexts/MediaContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { PlayerState, type BookLibraryItem, type PodcastLibraryItem, type RssFeed } from '@/types/api'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 interface LibraryItemActionButtonsProps {
   libraryItem: BookLibraryItem | PodcastLibraryItem
@@ -39,8 +38,11 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     removeItemFromQueue,
     playerHandler
   } = useMediaContext()
-  const { library } = useLibrary()
   const t = useTypeSafeTranslations()
+  const [matchModalOpen, setMatchModalOpen] = useState(false)
+  const handleOpenMatch = useCallback(() => {
+    setMatchModalOpen(true)
+  }, [])
 
   const mediaProgress = getLibraryItemProgress(libraryItem.id)
   const isRead = mediaProgress?.isFinished ?? false
@@ -66,7 +68,6 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     confirmState,
     rssFeedModalOpen,
     shareModalOpen,
-    matchModalOpen,
     transcribeModalOpen,
     mediaItemShare,
     closeConfirm,
@@ -98,6 +99,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     onDeleteSuccess: () => {
       window.location.href = `/library/${libraryItem.libraryId}`
     },
+    onOpenMatch: handleOpenMatch,
     playerControls: playerHandler.controls
   })
 
@@ -268,7 +270,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
         mediaItemShare={mediaItemShare}
         onShareChange={handleShareChange}
       />
-      <MatchModal isOpen={matchModalOpen} onClose={closeMatchModal} libraryItem={libraryItem} bookCoverAspectRatio={library?.settings?.coverAspectRatio ?? 1} />
+      <MatchModal isOpen={matchModalOpen} onClose={() => setMatchModalOpen(false)} libraryItem={libraryItem} />
       <TranscribeModal
         isOpen={transcribeModalOpen}
         onClose={closeTranscribeModal}

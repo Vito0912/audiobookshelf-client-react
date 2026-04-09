@@ -11,24 +11,16 @@ import MediaCardFrame from '@/components/widgets/media-card/MediaCardFrame'
 import MediaCardOverlay from '@/components/widgets/media-card/MediaCardOverlay'
 import { useMediaCardActions } from '@/components/widgets/media-card/useMediaCardActions'
 import { useCardSize } from '@/contexts/CardSizeContext'
+import { useBookCoverAspectRatio, useLibrary } from '@/contexts/LibraryContext'
 import { useMediaContext } from '@/contexts/MediaContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
-import { getCoverAspectRatio, getPlaceholderCoverUrl } from '@/lib/coverUtils'
+import { getEntityNavigationContext, type EntityNavigationContext } from '@/lib/bookshelfNavigationContext'
+import { getPlaceholderCoverUrl } from '@/lib/coverUtils'
 import { computeProgress } from '@/lib/mediaProgress'
-import type {
-  BookLibraryItem,
-  BookMedia,
-  EReaderDevice,
-  LibraryItem,
-  MediaProgress,
-  PodcastEpisode,
-  PodcastLibraryItem,
-  PodcastMedia,
-  UserPermissions
-} from '@/types/api'
+import type { BookMedia, BookshelfEntity, EReaderDevice, LibraryItem, MediaProgress, PodcastEpisode, PodcastMedia, UserPermissions } from '@/types/api'
 import { BookshelfView, isBookMedia, isBookMetadata, isPodcastLibraryItem } from '@/types/api'
 import { useRouter } from 'next/navigation'
-import { memo, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 
 export interface MediaCardProps {
   libraryItem: LibraryItem
@@ -44,10 +36,6 @@ export interface MediaCardProps {
    * Optional precomputed series progress for collapsed series items (0–1).
    */
   seriesProgressPercent?: number
-  /**
-   * Cover configuration
-   */
-  bookCoverAspectRatio?: 0 | 1
   sizeMultiplier?: number
   dateFormat: string
   timeFormat: string
@@ -82,6 +70,11 @@ export interface MediaCardProps {
    * Callback when the select button is clicked
    */
   onSelect?: (event: React.MouseEvent) => void
+  /**
+   * When both are set, modal prev/next scope is built lazily on open from this shelf snapshot (sparse bookshelf grid or dense home row).
+   */
+  shelfEntities?: (BookshelfEntity | null)[]
+  entityIndex?: number
 }
 
 function MediaCard(props: MediaCardProps) {
@@ -93,7 +86,6 @@ function MediaCard(props: MediaCardProps) {
     continueListeningShelf = false,
     mediaProgress,
     seriesProgressPercent,
-    bookCoverAspectRatio,
     sizeMultiplier,
     dateFormat,
     timeFormat,
@@ -105,10 +97,14 @@ function MediaCard(props: MediaCardProps) {
     episode,
     isSelectionMode = false,
     selected = false,
-    onSelect
+    onSelect,
+    shelfEntities,
+    entityIndex
   } = props
 
   const router = useRouter()
+  const { setBoundModal } = useLibrary()
+  const coverAspect = useBookCoverAspectRatio()
   const { libraryItemIdStreaming, isStreaming, isPlaying, isStreamingFromDifferentLibrary, getIsMediaQueued, playerHandler } = useMediaContext()
   const { sizeMultiplier: contextSizeMultiplier } = useCardSize()
   const cardId = useId()
@@ -119,6 +115,18 @@ function MediaCard(props: MediaCardProps) {
 
   const [isHovering, setIsHovering] = useState(false)
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
+
+  const clearBoundModal = useCallback(() => setBoundModal(null), [setBoundModal])
+
+  const handleOpenMatch = useCallback(() => {
+    const defaultNavigationContext: EntityNavigationContext = { entityIds: [libraryItem.id], initialIndex: 0 }
+    let navigationContext: EntityNavigationContext = defaultNavigationContext
+    if (shelfEntities !== undefined && entityIndex !== undefined) {
+      const computedNavigationContext = getEntityNavigationContext(shelfEntities, entityIndex)
+      if (computedNavigationContext) navigationContext = computedNavigationContext
+    }
+    setBoundModal(<MatchModal key="match-modal" isOpen navCtx={navigationContext} onClose={clearBoundModal} />)
+  }, [clearBoundModal, libraryItem.id, shelfEntities, entityIndex, setBoundModal])
 
   const handleMoreMenuOpenChange = (isOpen: boolean) => {
     setIsMoreMenuOpen(isOpen)
@@ -159,7 +167,6 @@ function MediaCard(props: MediaCardProps) {
   const placeholderUrl = getPlaceholderCoverUrl()
   const hasCover = !!media.coverPath
 
-  const coverAspect = getCoverAspectRatio(bookCoverAspectRatio ?? 1)
   const coverHeight = 192 * effectiveSizeMultiplier
   const coverWidth = coverHeight / coverAspect
 
@@ -247,13 +254,11 @@ function MediaCard(props: MediaCardProps) {
     confirmState,
     rssFeedModalOpen,
     shareModalOpen,
-    matchModalOpen,
     transcribeModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
-    closeMatchModal,
     closeTranscribeModal,
     handleShareChange,
     handlePlay,
@@ -277,6 +282,7 @@ function MediaCard(props: MediaCardProps) {
     isStreamingFromDifferentLib,
     isQueued,
     initialShare: libraryItem.mediaItemShare ?? null,
+    onOpenMatch: handleOpenMatch,
     playerControls: playerHandler.controls
   })
 
@@ -399,12 +405,6 @@ function MediaCard(props: MediaCardProps) {
           onShareChange={handleShareChange}
         />
       )}
-      <MatchModal
-        isOpen={matchModalOpen}
-        onClose={closeMatchModal}
-        libraryItem={libraryItem as BookLibraryItem | PodcastLibraryItem}
-        bookCoverAspectRatio={bookCoverAspectRatio ?? 1}
-      />
       <TranscribeModal isOpen={transcribeModalOpen} onClose={closeTranscribeModal} libraryItemId={libraryItem.id} itemTitle={title} />
     </>
   )

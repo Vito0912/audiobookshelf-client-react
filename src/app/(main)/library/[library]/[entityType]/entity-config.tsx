@@ -24,7 +24,6 @@ function bookshelfCardNoopSelect(_event: MouseEvent) {}
 
 export interface SkeletonComponentProps {
   bookshelfView: BookshelfView
-  coverAspectRatio: 0 | 1
   seriesSortBy?: string
   showSubtitles?: boolean
   orderBy?: string
@@ -36,11 +35,12 @@ export interface CardComponentProps {
   width: number
   libraryId?: string
   isPodcastLibrary?: boolean
-  coverAspectRatio: 0 | 1
   showSubtitles?: boolean
   orderBy?: string
   seriesSortBy?: string
   bookProgressMap: Map<string, MediaProgress>
+  shelfEntities?: (BookshelfEntity | null)[]
+  entityIndex?: number
 }
 
 export interface EntityConfig {
@@ -102,10 +102,10 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       }
       return isPodcastLibrary ? 'MessageNoPodcastsFound' : 'MessageNoBooksFound'
     },
-    SkeletonComponent: ({ bookshelfView, coverAspectRatio, showSubtitles, orderBy }) => (
-      <MediaCardSkeleton bookshelfView={bookshelfView} bookCoverAspectRatio={coverAspectRatio} showSubtitles={showSubtitles} orderBy={orderBy} />
+    SkeletonComponent: ({ bookshelfView, showSubtitles, orderBy }) => (
+      <MediaCardSkeleton bookshelfView={bookshelfView} showSubtitles={showSubtitles} orderBy={orderBy} />
     ),
-    CardComponent: ({ entity, bookshelfView, width, isPodcastLibrary, coverAspectRatio, showSubtitles, orderBy, bookProgressMap }) => {
+    CardComponent: ({ entity, bookshelfView, width, isPodcastLibrary, showSubtitles, orderBy, bookProgressMap, shelfEntities, entityIndex }) => {
       const { user, serverSettings, ereaderDevices } = useUser()
       const item = entity as LibraryItem
       const isCollapsedSeries = !!item.collapsedSeries
@@ -118,7 +118,6 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
             <CollapsedSeriesCard
               libraryItem={item}
               bookshelfView={bookshelfView}
-              bookCoverAspectRatio={coverAspectRatio}
               mediaProgress={entityProgress}
               isSelectionMode={false}
               selected={false}
@@ -137,7 +136,6 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
           <EntityMediaCard
             libraryItem={item}
             bookshelfView={bookshelfView}
-            bookCoverAspectRatio={coverAspectRatio}
             mediaProgress={entityProgress}
             isSelectionMode={false}
             selected={false}
@@ -148,6 +146,8 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
             ereaderDevices={ereaderDevices}
             showSubtitles={showSubtitles ?? false}
             orderBy={orderBy ?? ''}
+            shelfEntities={shelfEntities}
+            entityIndex={entityIndex}
           />
         </div>
       )
@@ -163,10 +163,8 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     getContextMenuItems: () => [],
     handleContextMenuAction: () => {},
     getEmptyMessageKey: (filterBy) => (filterBy === 'all' ? 'MessageBookshelfNoSeries' : 'MessageNoSeriesFound'),
-    SkeletonComponent: ({ bookshelfView, coverAspectRatio, seriesSortBy }) => (
-      <SeriesCardSkeleton bookshelfView={bookshelfView} bookCoverAspectRatio={coverAspectRatio} orderBy={seriesSortBy} />
-    ),
-    CardComponent: ({ entity, bookshelfView, width, libraryId, coverAspectRatio, seriesSortBy, bookProgressMap }) => {
+    SkeletonComponent: ({ bookshelfView, seriesSortBy }) => <SeriesCardSkeleton bookshelfView={bookshelfView} orderBy={seriesSortBy} />,
+    CardComponent: ({ entity, bookshelfView, width, libraryId, seriesSortBy, bookProgressMap }) => {
       const { serverSettings } = useUser()
       const series = entity as Series
       return (
@@ -175,7 +173,6 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
             series={series}
             libraryId={libraryId ?? ''}
             bookshelfView={bookshelfView}
-            bookCoverAspectRatio={coverAspectRatio}
             dateFormat={serverSettings?.dateFormat ?? 'MM/dd/yyyy'}
             orderBy={seriesSortBy}
             bookProgressMap={bookProgressMap}
@@ -219,14 +216,12 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     getContextMenuItems: () => [],
     handleContextMenuAction: () => {},
     getEmptyMessageKey: (filterBy) => (filterBy === 'all' ? 'MessageBookshelfNoCollections' : 'MessageNoCollectionsFound'),
-    SkeletonComponent: ({ bookshelfView, coverAspectRatio }) => (
-      <CollectionCardSkeleton bookshelfView={bookshelfView} bookCoverAspectRatio={coverAspectRatio} />
-    ),
-    CardComponent: ({ entity, bookshelfView, width, coverAspectRatio }) => {
+    SkeletonComponent: ({ bookshelfView }) => <CollectionCardSkeleton bookshelfView={bookshelfView} />,
+    CardComponent: ({ entity, bookshelfView, width }) => {
       const collection = entity as Collection
       return (
         <div style={{ width: `${width}px`, flexShrink: 0 }}>
-          <CollectionCard collection={collection} bookshelfView={bookshelfView} bookCoverAspectRatio={coverAspectRatio} />
+          <CollectionCard collection={collection} bookshelfView={bookshelfView} />
         </div>
       )
     }
@@ -236,12 +231,12 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     getContextMenuItems: () => [],
     handleContextMenuAction: () => {},
     getEmptyMessageKey: () => 'MessageNoUserPlaylists',
-    SkeletonComponent: ({ bookshelfView, coverAspectRatio }) => <PlaylistCardSkeleton bookshelfView={bookshelfView} bookCoverAspectRatio={coverAspectRatio} />,
-    CardComponent: ({ entity, bookshelfView, width, coverAspectRatio }) => {
+    SkeletonComponent: ({ bookshelfView }) => <PlaylistCardSkeleton bookshelfView={bookshelfView} />,
+    CardComponent: ({ entity, bookshelfView, width }) => {
       const playlist = entity as Playlist
       return (
         <div style={{ width: `${width}px`, flexShrink: 0 }}>
-          <PlaylistCard playlist={playlist} bookshelfView={bookshelfView} bookCoverAspectRatio={coverAspectRatio} />
+          <PlaylistCard playlist={playlist} bookshelfView={bookshelfView} />
         </div>
       )
     }
