@@ -73,7 +73,6 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
-    closeMatchModal,
     closeTranscribeModal,
     handleShareChange,
     handleReadEBook,
