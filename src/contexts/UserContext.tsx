@@ -4,6 +4,13 @@ import { EReaderDevice, MediaProgress, ServerSettings, User, UserLoginResponse }
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react'
 import { useSocketEvent } from './SocketContext'
 
+interface UserItemProgressUpdatedPayload {
+  id: string // MediaProgress ID
+  data?: MediaProgress | null
+  deviceDescription?: string // e.g. "Windows 10 / Chrome"
+  sessionId?: string // PlaybackSession ID
+}
+
 export interface UserContextType {
   user: User
   userCanUpdate: boolean
@@ -15,8 +22,8 @@ export interface UserContextType {
   userDefaultLibraryId?: string
   ereaderDevices: EReaderDevice[]
   Source: string
-  getLibraryItemProgress: (libraryItemId: string) => MediaProgress | undefined
-  getEpisodeProgress: (episodeId: string) => MediaProgress | undefined
+  /** Book media id or podcast episode id matches `MediaProgress.mediaItemId` */
+  getMediaItemProgress: (mediaItemId: string) => MediaProgress | undefined
 }
 
 export const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -35,6 +42,33 @@ export function UserProvider({ children, initialUser }: { children: ReactNode; i
     }
   })
 
+  useSocketEvent<UserItemProgressUpdatedPayload>('user_item_progress_updated', (payload) => {
+    if (!payload?.id) return
+
+    // TODO: handle check if media item is currently playing to show alert if another device is playing the same item
+
+    setCurrentUserData((prev) => {
+      const currentProgress = prev.user.mediaProgress || []
+
+      const index = currentProgress.findIndex((entry) => entry.id === payload.id)
+      const nextProgress = [...currentProgress]
+
+      if (index >= 0) {
+        nextProgress[index] = payload.data!
+      } else {
+        nextProgress.push(payload.data!)
+      }
+
+      return {
+        ...prev,
+        user: {
+          ...prev.user,
+          mediaProgress: nextProgress
+        }
+      }
+    })
+  })
+
   // To capture if initialUser changes from server refresh
   useEffect(() => {
     setCurrentUserData(initialUser)
@@ -51,8 +85,7 @@ export function UserProvider({ children, initialUser }: { children: ReactNode; i
     userDefaultLibraryId: currentUserData.userDefaultLibraryId,
     ereaderDevices: currentUserData.ereaderDevices,
     Source: currentUserData.Source,
-    getLibraryItemProgress: (libraryItemId: string) => user.mediaProgress.find((p) => p.libraryItemId === libraryItemId && !p.episodeId),
-    getEpisodeProgress: (episodeId: string) => user.mediaProgress.find((p) => p.mediaItemId === episodeId)
+    getMediaItemProgress: (mediaItemId: string) => user.mediaProgress.find((p) => p.mediaItemId === mediaItemId)
   }
 
   return <UserContext.Provider value={contextValue}>{children}</UserContext.Provider>

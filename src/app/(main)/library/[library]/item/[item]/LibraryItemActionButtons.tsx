@@ -25,7 +25,7 @@ interface LibraryItemActionButtonsProps {
 }
 
 export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed = null }: LibraryItemActionButtonsProps) {
-  const { userCanUpdate, getLibraryItemProgress, ereaderDevices } = useUser()
+  const { userCanUpdate, getMediaItemProgress, ereaderDevices } = useUser()
   const {
     playItem,
     libraryItemIdStreaming,
@@ -44,7 +44,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     setMatchModalOpen(true)
   }, [])
 
-  const mediaProgress = getLibraryItemProgress(libraryItem.id)
+  const mediaProgress = libraryItem.media?.id ? getMediaItemProgress(libraryItem.media.id) : undefined
   const isRead = mediaProgress?.isFinished ?? false
 
   const isPodcast = libraryItem.mediaType === 'podcast'
