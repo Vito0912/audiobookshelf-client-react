@@ -1148,6 +1148,13 @@ export interface UpdateLibraryItemMediaResponse {
   libraryItem?: LibraryItem
 }
 
+export interface StartItemTranscriptionPayload {
+  apiKey: string
+  languageCode?: 'en' | 'de'
+  diarize?: boolean
+  tagAudioEvents?: boolean
+}
+
 // ============================================================================
 // TASKS & PROGRESS TRACKING
 // ============================================================================

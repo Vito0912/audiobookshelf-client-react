@@ -1,7 +1,7 @@
 'use server'
 
 import * as api from '@/lib/api'
-import { RssPodcastEpisode, UpdateLibraryItemMediaPayload } from '@/types/api'
+import { RssPodcastEpisode, StartItemTranscriptionPayload, UpdateLibraryItemMediaPayload } from '@/types/api'
 
 export async function toggleFinishedAction(libraryItemId: string, params: { isFinished: boolean; episodeId?: string }) {
   return api.updateMediaFinished(libraryItemId, params)
@@ -21,6 +21,10 @@ export async function rescanLibraryItemAction(libraryItemId: string) {
 
 export async function sendEbookToDeviceAction(payload: { libraryItemId: string; deviceName: string }) {
   return api.sendEbookToDevice(payload)
+}
+
+export async function startItemTranscriptionAction(libraryItemId: string, payload: StartItemTranscriptionPayload) {
+  return api.startItemTranscription(libraryItemId, payload)
 }
 
 export async function removeSeriesFromContinueListeningAction(seriesId: string) {
