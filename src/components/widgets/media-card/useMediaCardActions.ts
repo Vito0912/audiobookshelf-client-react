@@ -74,6 +74,8 @@ export function useMediaCardActions({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [rssFeedModalOpen, setRssFeedModalOpen] = useState(false)
   const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [collectionsModalOpen, setCollectionsModalOpen] = useState(false)
+  const [playlistsModalOpen, setPlaylistsModalOpen] = useState(false)
   const [mediaItemShare, setMediaItemShare] = useState<MediaItemShare | null>(initialShare)
   const rssFeed = libraryItem.rssFeed ?? null
   const showRssFeedButton = userIsAdminOrUp || rssFeed != null
@@ -208,8 +210,10 @@ export function useMediaCardActions({
       } else if (action === 'removeFromQueue') {
         const episodeId = episodeForQueue ? episodeForQueue.id : null
         removeItemFromQueue({ libraryItemId: libraryItem.id, episodeId })
-      } else if (action === 'openCollections' || action === 'openPlaylists') {
-        showToast('This action is not implemented yet.', { type: 'info' })
+      } else if (action === 'openCollections') {
+        setCollectionsModalOpen(true)
+      } else if (action === 'openPlaylists') {
+        setPlaylistsModalOpen(true)
       } else if (action === 'openShare') {
         setShareModalOpen(true)
       } else if (action === 'openRssFeed') {
@@ -472,6 +476,14 @@ export function useMediaCardActions({
     setShareModalOpen(false)
   }, [])
 
+  const closeCollectionsModal = useCallback(() => {
+    setCollectionsModalOpen(false)
+  }, [])
+
+  const closePlaylistsModal = useCallback(() => {
+    setPlaylistsModalOpen(false)
+  }, [])
+
   const handleShareChange = useCallback(
     (share: MediaItemShare | null) => {
       setMediaItemShare(share)
@@ -486,10 +498,14 @@ export function useMediaCardActions({
     confirmState,
     rssFeedModalOpen,
     shareModalOpen,
+    collectionsModalOpen,
+    playlistsModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
+    closeCollectionsModal,
+    closePlaylistsModal,
     handleShareChange,
     handlePlay,
     handleReadEBook,

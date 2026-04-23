@@ -42,6 +42,7 @@ import {
   OpenRssFeedResponse,
   PersonalizedShelf,
   Playlist,
+  PlaylistItemPayload,
   PodcastSearchResult,
   RssPodcastEpisode,
   SaveLibraryOrderApiResponse,
@@ -57,36 +58,7 @@ import {
   UserLoginResponse
 } from '../types/api'
 
-/**
- * Custom error classes for API error handling
- */
-export class UnauthorizedError extends Error {
-  constructor(message = 'Unauthorized') {
-    super(message)
-    this.name = 'UnauthorizedError'
-  }
-}
-
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public statusText: string
-  ) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
-
-export class NetworkError extends Error {
-  constructor(
-    message = 'Network error',
-    public cause?: unknown
-  ) {
-    super(message)
-    this.name = 'NetworkError'
-  }
-}
+import { ApiError, NetworkError, UnauthorizedError } from './apiErrors'
 
 const publicEndpoints = ['/status']
 const RefreshTokenExpiry = parseInt(process.env.REFRESH_TOKEN_EXPIRY || '') || 7 * 24 * 60 * 60 // 7 days
@@ -566,7 +538,7 @@ export const getCollection = cache(async (collectionId: string): Promise<Collect
 })
 
 export const getSeries = cache(async (libraryId: string, seriesId: string): Promise<Series> => {
-  return apiRequest<Series>(`/api/libraries/${libraryId}/series/${seriesId}`, {})
+  return apiRequest<Series>(`/api/libraries/${libraryId}/series/${seriesId}?include=rssfeed`, {})
 })
 
 // Paginated entity list functions for bookshelf views
@@ -637,8 +609,13 @@ export const closeRssFeed = cache(async (feedId: string): Promise<void> => {
   })
 })
 
-export async function openItemRssFeed(itemId: string, payload: OpenRssFeedPayload): Promise<OpenRssFeedResponse> {
-  return apiRequest<OpenRssFeedResponse>(`/api/feeds/item/${itemId}/open`, {
+/** open an rss feed for library item, series or collection */
+export async function openEntityRssFeed(
+  entityType: 'item' | 'collection' | 'series',
+  entityId: string,
+  payload: OpenRssFeedPayload
+): Promise<OpenRssFeedResponse> {
+  return apiRequest<OpenRssFeedResponse>(`/api/feeds/${entityType}/${entityId}/open`, {
     method: 'POST',
     body: JSON.stringify(payload)
   })
@@ -960,6 +937,35 @@ export async function matchAll(libraryId: string): Promise<void> {
 //
 
 /**
+ * Create a collection w/ initial book library item IDs
+ */
+export async function createCollection(payload: { libraryId: string; name: string; description?: string | null; books?: string[] }): Promise<Collection> {
+  return apiRequest<Collection>('/api/collections', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * Add a book library item to a collection
+ */
+export async function addBookToCollection(collectionId: string, libraryItemId: string): Promise<Collection> {
+  return apiRequest<Collection>(`/api/collections/${collectionId}/book`, {
+    method: 'POST',
+    body: JSON.stringify({ id: libraryItemId })
+  })
+}
+
+/**
+ * Remove a book library item from a collection
+ */
+export async function removeBookFromCollection(collectionId: string, libraryItemId: string): Promise<Collection> {
+  return apiRequest<Collection>(`/api/collections/${collectionId}/book/${libraryItemId}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
  * Update a collection
  * @param collectionId - Collection ID
  * @param payload - Update payload with name and/or description
@@ -1002,6 +1008,41 @@ export async function createPlaylistFromCollection(collectionId: string): Promis
 export async function deletePlaylist(playlistId: string): Promise<void> {
   return apiRequest<void>(`/api/playlists/${playlistId}`, {
     method: 'DELETE'
+  })
+}
+
+/**
+ * Create a playlist w/ initial items
+ */
+export async function createPlaylist(payload: {
+  libraryId: string
+  name: string
+  description?: string | null
+  items?: PlaylistItemPayload[]
+}): Promise<Playlist> {
+  return apiRequest<Playlist>('/api/playlists', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * Batch add items to a playlist
+ */
+export async function batchAddToPlaylist(playlistId: string, items: PlaylistItemPayload[]): Promise<Playlist> {
+  return apiRequest<Playlist>(`/api/playlists/${playlistId}/batch/add`, {
+    method: 'POST',
+    body: JSON.stringify({ items })
+  })
+}
+
+/**
+ * Batch remove items from a playlist
+ */
+export async function batchRemoveFromPlaylist(playlistId: string, items: PlaylistItemPayload[]): Promise<Playlist> {
+  return apiRequest<Playlist>(`/api/playlists/${playlistId}/batch/remove`, {
+    method: 'POST',
+    body: JSON.stringify({ items })
   })
 }
 

@@ -1,5 +1,7 @@
 'use client'
 
+import AddToCollectionModal from '@/components/modals/AddToCollectionModal'
+import AddToPlaylistModal from '@/components/modals/AddToPlaylistModal'
 import LibraryItemEditModal from '@/components/modals/LibraryItemEditModal'
 import MatchModal from '@/components/modals/MatchModal'
 import RssFeedOpenCloseModal from '@/components/modals/RssFeedOpenCloseModal'
@@ -249,10 +251,14 @@ function MediaCard(props: MediaCardProps) {
     confirmState,
     rssFeedModalOpen,
     shareModalOpen,
+    collectionsModalOpen,
+    playlistsModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
     closeShareModal,
+    closeCollectionsModal,
+    closePlaylistsModal,
     handleShareChange,
     handlePlay,
     handleReadEBook,
@@ -391,6 +397,25 @@ function MediaCard(props: MediaCardProps) {
           mediaItemId={libraryItem.media.id ?? ''}
           mediaItemShare={mediaItemShare}
           onShareChange={handleShareChange}
+        />
+      )}
+      {collectionsModalOpen && (
+        <AddToCollectionModal
+          isOpen={collectionsModalOpen}
+          onClose={closeCollectionsModal}
+          libraryId={libraryItem.libraryId}
+          libraryItemId={libraryItem.id}
+          itemTitle={title}
+        />
+      )}
+      {playlistsModalOpen && (
+        <AddToPlaylistModal
+          isOpen={playlistsModalOpen}
+          onClose={closePlaylistsModal}
+          libraryId={libraryItem.libraryId}
+          libraryItemId={libraryItem.id}
+          episodeId={episode?.id ?? null}
+          itemTitle={title}
         />
       )}
     </>
