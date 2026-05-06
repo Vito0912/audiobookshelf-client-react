@@ -35,8 +35,10 @@ import {
   Library,
   LibraryFilterData,
   LibraryItem,
+  ListeningStats,
   MediaItemShare,
   MetadataProvidersResponse,
+  MutateBackupsResponse,
   OpenMediaItemSharePayload,
   OpenRssFeedPayload,
   OpenRssFeedResponse,
@@ -355,6 +357,10 @@ export const getCurrentUser = cache(async (): Promise<UserLoginResponse> => {
   })
 })
 
+export const getListeningStats = cache(async (): Promise<ListeningStats> => {
+  return apiRequest<ListeningStats>('/api/me/listening-stats')
+})
+
 export const getServerStatus = cache(async (): Promise<ServerStatus> => {
   return apiRequest<ServerStatus>('/status')
 })
@@ -637,6 +643,24 @@ export async function closeMediaItemShare(shareId: string): Promise<void> {
 export const getBackups = cache(async (): Promise<GetBackupsResponse> => {
   return apiRequest<GetBackupsResponse>('/api/backups', {})
 })
+
+export async function createBackup(): Promise<MutateBackupsResponse> {
+  return apiRequest<MutateBackupsResponse>('/api/backups', {
+    method: 'POST'
+  })
+}
+
+export async function deleteBackup(backupId: string): Promise<MutateBackupsResponse> {
+  return apiRequest<MutateBackupsResponse>(`/api/backups/${backupId}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function applyBackup(backupId: string): Promise<void> {
+  await apiRequest<void>(`/api/backups/${backupId}/apply`, {
+    method: 'GET'
+  })
+}
 
 export const getListeningSessions = cache(async (queryParams?: string): Promise<GetListeningSessionsResponse> => {
   return apiRequest<GetListeningSessionsResponse>(`/api/sessions${queryParams ? `?${queryParams}` : ''}`, {})

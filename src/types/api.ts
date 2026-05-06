@@ -945,7 +945,7 @@ export interface CreateCustomMetadataProviderResponse {
 
 export interface Backup {
   id: string
-  key: string
+  key: string | null
   backupDirPath: string
   datePretty: string
   fullPath: string
@@ -953,12 +953,16 @@ export interface Backup {
   filename: string
   fileSize: number
   createdAt: number
-  serverVersion: string
+  serverVersion: string | null
 }
 
 export interface GetBackupsResponse {
   backupLocation: string
   backupPathEnvSet: boolean
+  backups: Backup[]
+}
+
+export interface MutateBackupsResponse {
   backups: Backup[]
 }
 
@@ -1342,6 +1346,25 @@ export interface PlaybackSession {
   open?: boolean
   /** Only for share sessions - it's the only way the share player can know the library cover aspect ratio */
   coverAspectRatio?: 0 | 1
+}
+
+/**
+ * Aggregated listening stats from GET /api/me/listening-stats
+ */
+export interface ListeningStatsItemAggregate {
+  id: string
+  timeListening: number
+  mediaMetadata: Record<string, unknown>
+  lastUpdate?: number
+}
+
+export interface ListeningStats {
+  totalTime: number
+  items: Record<string, ListeningStatsItemAggregate>
+  days: Record<string, number>
+  dayOfWeek: Record<string, number>
+  today: number
+  recentSessions: PlaybackSession[]
 }
 
 export interface GetListeningSessionsResponse {
