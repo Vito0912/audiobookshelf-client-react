@@ -1,6 +1,7 @@
 'use client'
 
 import Dropdown, { DropdownItem } from '@/components/ui/Dropdown'
+import TextInput from '@/components/ui/TextInput'
 import { useSocketEmit, useSocketEvent } from '@/contexts/SocketContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { LoggerDataLog, LogLevel, ServerSettings } from '@/types/api'
@@ -41,9 +42,11 @@ function getLogLevelColor(levelName: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'TRAC
 export default function LogsContainer({ currentDailyLogs, logLevel: initialLogLevel, updateServerSettings }: LogsContainerProps) {
   const t = useTypeSafeTranslations()
   const [logs, setLogs] = useState<LoggerDataLog[]>(currentDailyLogs)
+  const [searchQuery, setSearchQuery] = useState('')
   const [logLevel, setLogLevel] = useState<number>(initialLogLevel ?? LogLevel.INFO)
   const [isPending, startTransition] = useTransition()
   const containerRef = useRef<HTMLDivElement>(null)
+  const prevHadSearchQuery = useRef(false)
   const { emit } = useSocketEmit()
 
   const logLevelItems: DropdownItem[] = useMemo(() => {
@@ -62,6 +65,15 @@ export default function LogsContainer({ currentDailyLogs, logLevel: initialLogLe
 
     return defaultItems
   }, [t, logLevel])
+
+  const visibleLogs = useMemo(() => {
+    const levelFiltered = logs.filter((log) => log.level >= logLevel)
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return levelFiltered
+    return levelFiltered.filter(
+      (log) => log.message.toLowerCase().includes(q) || log.timestamp.toLowerCase().includes(q) || log.source.toLowerCase().includes(q)
+    )
+  }, [logs, logLevel, searchQuery])
 
   // Emit set_log_listener when socket connects
   useEffect(() => {
@@ -102,6 +114,17 @@ export default function LogsContainer({ currentDailyLogs, logLevel: initialLogLe
     scrollToBottom()
   }, [scrollToBottom])
 
+  // After clearing search, scroll to bottom
+  useEffect(() => {
+    const hasSearch = Boolean(searchQuery.trim())
+    const wasSearching = prevHadSearchQuery.current
+    prevHadSearchQuery.current = hasSearch
+    if (wasSearching && !hasSearch) {
+      const id = window.setTimeout(() => scrollToBottom(), 0)
+      return () => window.clearTimeout(id)
+    }
+  }, [searchQuery, scrollToBottom])
+
   // Handle incoming log events
   const handleLogEvent = useCallback(
     (log: LoggerDataLog) => {
@@ -127,8 +150,9 @@ export default function LogsContainer({ currentDailyLogs, logLevel: initialLogLe
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex justify-end">
-        <div className="w-full sm:w-44">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <TextInput value={searchQuery} onChange={setSearchQuery} type="search" placeholder={t('PlaceholderSearch')} clearable className="w-48" />
+        <div className="sm:w-44">
           <Dropdown
             items={logLevelItems}
             label={t('LabelServerLogLevel')}
@@ -139,9 +163,9 @@ export default function LogsContainer({ currentDailyLogs, logLevel: initialLogLe
           />
         </div>
       </div>
-      <div ref={containerRef} className="border-border h-full max-h-[calc(100vh-20rem)] w-full overflow-x-hidden overflow-y-auto rounded-md border">
+      <div ref={containerRef} className="border-border h-[calc(100vh-20rem)] min-h-60 w-full overflow-x-hidden overflow-y-auto rounded-md border">
         <div className="flex flex-col">
-          {logs.map((log, index) => (
+          {visibleLogs.map((log, index) => (
             <LogsRow key={index} log={log} isEven={index % 2 === 0} />
           ))}
         </div>
@@ -154,8 +178,8 @@ function LogsRow({ log, isEven }: { log: LoggerDataLog; isEven: boolean }) {
   const logLevelColor = getLogLevelColor(log.levelName)
   return (
     <div className={`flex items-start gap-2 p-2 ${isEven ? 'bg-table-row-bg-even' : ''}`}>
-      <div className="text-foreground-subdued w-36 text-xs">{log.timestamp}</div>
-      <div className={`w-12 text-xs ${logLevelColor}`}>{log.levelName}</div>
+      <div className="text-foreground-subdued w-36 text-xs leading-5">{log.timestamp}</div>
+      <div className={`w-12 text-xs leading-5 ${logLevelColor}`}>{log.levelName}</div>
       <div className={`text-sm ${log.level < 2 ? 'text-foreground-subdued' : 'text-foreground'} w-[calc(100%-13rem)]`}>{log.message}</div>
     </div>
   )
