@@ -9,7 +9,7 @@ on:
       tags:
         description: "Docker Tag"
         required: false
-        default: 'personal'
+        default: "personal"
 
 jobs:
   build:
@@ -37,6 +37,9 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: client-react
+
+      - name: Remove old client
+        run: rm -rf client
 
       - name: Copy client
         run: mv client-vue/client .
