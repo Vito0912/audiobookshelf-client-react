@@ -5,6 +5,7 @@ import SimpleDataTable, { DataTableColumn } from '@/components/ui/SimpleDataTabl
 import Tooltip from '@/components/ui/Tooltip'
 import ConfirmDialog from '@/components/widgets/ConfirmDialog'
 import OnlineIndicator from '@/components/widgets/OnlineIndicator'
+import { useSocket } from '@/contexts/SocketContext'
 import { useGlobalToast } from '@/contexts/ToastContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
@@ -26,11 +27,11 @@ export default function UsersTable({ users, dateFormat, timeFormat, onEditUser }
   const t = useTypeSafeTranslations()
   const router = useRouter()
   const { showToast } = useGlobalToast()
-  const { user } = useUser()
+  const { getIsUserOnline } = useSocket()
+  const { user: currentUser } = useUser()
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
   const deletingUserRef = useRef<User | null>(null)
-  const currentUserId = user.id
 
   const handleDeleteClick = useCallback((user: User) => {
     deletingUserRef.current = user
@@ -68,8 +69,7 @@ export default function UsersTable({ users, dateFormat, timeFormat, onEditUser }
       label: t('LabelUsername'),
       accessor: (user) => (
         <div className="flex items-center gap-2">
-          {/* TODO: Use actual user online status that comes from web socket */}
-          <OnlineIndicator value={user.id === currentUserId} />
+          <OnlineIndicator value={user.id === currentUser.id || getIsUserOnline(user.id)} />
           <p className="text-base font-medium">{user.username}</p>
         </div>
       )
