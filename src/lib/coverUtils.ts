@@ -9,7 +9,7 @@ import type { LibraryItem } from '@/types/api'
  */
 export function getLibraryItemCoverUrl(libraryItemId: string, timestamp?: number | null, raw: boolean = false): string {
   const params = new URLSearchParams()
-  params.set('ts', String(timestamp || Date.now()))
+  params.set('ts', String(timestamp ?? 0))
   if (raw) {
     params.set('raw', '1')
   }
@@ -21,14 +21,19 @@ export function getLibraryItemCoverUrl(libraryItemId: string, timestamp?: number
  *
  * Authentication is handled via httpOnly cookies through the Next.js internal API proxy.
  * The browser automatically includes the access_token cookie with the request.
- * If the token expires, Next.js middleware will redirect to refresh the token.
+ * The internal-api route refreshes expired access tokens before proxying to the backend.
  *
  * @param libraryItemId
  * @param fileIno - The file inode value
+ * @param timestamp - Optional timestamp for cache busting (typically updatedAt)
  * @returns Library file URL (authentication via cookies)
  */
-export function getLibraryFileUrl(libraryItemId: string, fileIno: string): string {
-  return `/internal-api/items/${libraryItemId}/file/${fileIno}`
+export function getLibraryFileUrl(libraryItemId: string, fileIno: string, timestamp?: number): string {
+  const params = new URLSearchParams()
+  if (timestamp) {
+    params.set('ts', String(timestamp))
+  }
+  return `/internal-api/items/${libraryItemId}/file/${fileIno}?${params.toString()}`
 }
 
 /**

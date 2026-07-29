@@ -1,20 +1,28 @@
 'use client'
 
 import ContextMenuDropdown from '@/components/ui/ContextMenuDropdown'
+import { useBookshelfSelection } from '@/contexts/BookshelfSelectionContext'
 import { useLibrary } from '@/contexts/LibraryContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 // Pages that should show item count and toolbar extras
 const BOOKSHELF_PAGE_PATTERNS = ['/items', '/series', '/collections', '/playlists', '/authors']
 
 export default function Toolbar() {
   const pathname = usePathname()
-  const { library, itemCount, detailToolbarTitle, contextMenuItems, onContextMenuAction, toolbarExtras, filterBy } = useLibrary()
+  const searchParams = useSearchParams()
+  const { library, itemCount, itemCountSupplement, detailToolbarTitle, contextMenuItems, onContextMenuAction, toolbarExtras, filterBy } = useLibrary()
+  const { isSelectionMode } = useBookshelfSelection()
   const t = useTypeSafeTranslations()
 
-  // Check if we're on any bookshelf-like page
+  const isSearchPage = pathname.endsWith('/search')
+  const searchQuery = searchParams.get('q')?.trim() ?? ''
+
+  // Check if we're on any bookshelf-like page (or a single collection, which syncs the same summary fields)
   const isBookshelfPage = BOOKSHELF_PAGE_PATTERNS.some((pattern) => pathname.endsWith(pattern))
+  const isCollectionDetailPage = pathname.includes('/collection/')
+  const isPlaylistDetailPage = pathname.includes('/playlist/')
 
   const isBookshelfEmpty = itemCount === 0 && filterBy === 'all'
 
@@ -30,9 +38,9 @@ export default function Toolbar() {
     itemName = t('LabelPlaylists')
   } else if (pathname.endsWith('/authors')) {
     itemName = t('LabelAuthors')
-  } else if (pathname.endsWith('/items')) {
+  } else if (pathname.endsWith('/items') || isCollectionDetailPage || isPlaylistDetailPage) {
     if (library?.mediaType === 'podcast') {
-      itemName = t('LabelPodcasts')
+      itemName = isPlaylistDetailPage ? t('LabelEpisodes') : t('LabelPodcasts')
     } else if (library?.mediaType === 'book') {
       itemName = t('LabelBooks')
     }
@@ -42,17 +50,31 @@ export default function Toolbar() {
     onContextMenuAction?.(action)
   }
 
-  const showBookshelfSummary = isBookshelfPage && itemCount !== null && !isSeriesDetailPage
-  const showSeriesDetailSummary = isSeriesDetailPage && itemCount !== null
-  const showToolbarExtras = isBookshelfPage && !isBookshelfEmpty && !isSeriesDetailPage
-  const showContextMenu = contextMenuItems.length > 0 && (!isBookshelfEmpty || isSeriesDetailPage)
+  const showBookshelfSummary = !isSearchPage && (isBookshelfPage || isCollectionDetailPage || isPlaylistDetailPage) && itemCount !== null && !isSeriesDetailPage
+  const showSeriesDetailSummary = !isSearchPage && isSeriesDetailPage && itemCount !== null
+  const showSearchSummary = isSearchPage && searchQuery
+  const showToolbarExtras = isBookshelfPage && !isBookshelfEmpty && !isSeriesDetailPage && !isSearchPage && !isSelectionMode
+  const showContextMenu = contextMenuItems.length > 0 && (!isBookshelfEmpty || isSeriesDetailPage) && !isSearchPage && !isSelectionMode
 
   return (
     <div className="bg-bg box-shadow-toolbar relative z-40 h-10 w-full" cy-id="library-toolbar">
       <div className="flex h-full w-full items-center justify-between px-4">
+        {showSearchSummary && (
+          <>
+            <div className="flex-grow" />
+            <p className="text-foreground text-base">
+              {t('MessageSearchResultsFor')} &quot;{searchQuery}&quot;
+            </p>
+            <div className="flex-grow" />
+          </>
+        )}
+
         {showBookshelfSummary && (
           <p className="text-foreground hidden text-base md:block">
-            {itemCount} {itemName}
+            <span>
+              {itemCount} {itemName}
+            </span>
+            {itemCountSupplement ? <span className="text-foreground-muted">{itemCountSupplement}</span> : null}
           </p>
         )}
 
@@ -65,7 +87,7 @@ export default function Toolbar() {
           </div>
         )}
 
-        <div className="flex-grow" />
+        {!showSearchSummary && <div className="flex-grow" />}
 
         {showToolbarExtras && <div className="mr-2 flex items-center gap-4">{toolbarExtras}</div>}
 

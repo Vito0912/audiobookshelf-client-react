@@ -1,9 +1,9 @@
 'use client'
 
-import { useClickOutside } from '@/hooks/useClickOutside'
+import { createAdditionalInsideCheck, useClickOutside } from '@/hooks/useClickOutside'
 import { mergeClasses } from '@/lib/merge-classes'
 import { useCallback, useId, useMemo, useRef, useState } from 'react'
-import DropdownMenu, { DropdownMenuItem } from './DropdownMenu'
+import DropdownMenu, { DropdownItemLabel, DropdownMenuItem } from './DropdownMenu'
 import InputWrapper from './InputWrapper'
 import Label from './Label'
 
@@ -86,7 +86,10 @@ export default function Dropdown({
     setOpenSubmenuIndex(null)
   }, [])
 
-  useClickOutside(menuRef, buttonRef, closeMenu)
+  // data-dropdown-id is used to identify portaled submenus as "inside" the dropdown
+  const isInsideSubmenu = useMemo(() => createAdditionalInsideCheck('data-dropdown-id', dropdownId), [dropdownId])
+
+  useClickOutside(menuRef, buttonRef, closeMenu, true, isInsideSubmenu)
 
   const toggleMenu = () => {
     if (disabled) return
@@ -330,7 +333,10 @@ export default function Dropdown({
 
       case 'Escape':
         e.preventDefault()
-        handleEscape()
+        if (showMenu || openSubmenuIndex !== null) {
+          e.stopPropagation()
+          handleEscape()
+        }
         break
 
       case 'Home':
@@ -377,7 +383,7 @@ export default function Dropdown({
   const dropdownButtonId = `${dropdownId}-button`
 
   return (
-    <div className={mergeClasses('relative w-full', className)}>
+    <div className={mergeClasses('relative w-full min-w-0', className)}>
       {label && (
         <Label htmlFor={dropdownButtonId} disabled={disabled}>
           {label}
@@ -411,10 +417,8 @@ export default function Dropdown({
           onClick={handleButtonClick}
           onKeyDown={handleKeyDown}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-0">
-            <span className={mergeClasses('block shrink truncate font-sans', selectedSubtext ? 'max-w-[75%] font-semibold' : '')}>{selectedText}</span>
-            {selectedSubtext && <span className="flex-shrink-0">:&nbsp;</span>}
-            {selectedSubtext && <span className="block max-w-[25%] shrink truncate font-sans font-normal text-gray-400">{selectedSubtext}</span>}
+          <span className="flex-1 overflow-hidden text-start" title={longLabel.trim() || undefined}>
+            <DropdownItemLabel text={selectedText} subtext={selectedSubtext || undefined} />
           </span>
           <span className="pointer-events-none ms-3 flex flex-shrink-0 items-center">
             {rightIcon || <span className="material-symbols text-2xl">expand_more</span>}

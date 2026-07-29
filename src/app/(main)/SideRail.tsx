@@ -1,6 +1,8 @@
 'use client'
 
+import VersionFooter from '@/components/app/VersionFooter'
 import { useLibrary } from '@/contexts/LibraryContext'
+import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { mergeClasses } from '@/lib/merge-classes'
 import Link from 'next/link'
@@ -10,6 +12,7 @@ export default function SideRail({ serverVersion, installSource }: { serverVersi
   const pathname = usePathname()
   const t = useTypeSafeTranslations()
   const { library } = useLibrary()
+  const { userIsAdminOrUp } = useUser()
 
   const currentLibraryId = library?.id ?? ''
   const currentLibraryMediaType = library?.mediaType ?? 'book'
@@ -104,13 +107,15 @@ export default function SideRail({ serverVersion, installSource }: { serverVersi
       icon: <span className="abs-icons icon-podcast text-xl"></span>,
       label: t('ButtonAdd'),
       href: `/library/${currentLibraryId}/add-podcast`,
-      mediaType: 'podcast'
+      mediaType: 'podcast',
+      adminOnly: true
     },
     {
       icon: <span className="material-symbols text-2xl">&#xf090;</span>,
       label: t('ButtonDownloadQueue'),
       href: `/library/${currentLibraryId}/download-queue`,
-      mediaType: 'podcast'
+      mediaType: 'podcast',
+      adminOnly: true
     },
     {
       icon: <span className="material-symbols text-2xl">warning</span>,
@@ -120,7 +125,9 @@ export default function SideRail({ serverVersion, installSource }: { serverVersi
     }
   ]
 
-  const filteredButtons = buttons.filter((button) => (!button.mediaType || button.mediaType === currentLibraryMediaType) && !button.hidden)
+  const filteredButtons = buttons.filter(
+    (button) => (!button.mediaType || button.mediaType === currentLibraryMediaType) && !button.hidden && (!button.adminOnly || userIsAdminOrUp)
+  )
 
   return (
     <div className="bg-bg box-shadow-side z-10 hidden h-full max-h-[calc(100vh-4rem)] w-20 min-w-20 md:block">
@@ -142,8 +149,7 @@ export default function SideRail({ serverVersion, installSource }: { serverVersi
         ))}
       </div>
       <div className="border-primary/30 h-12 w-full border-t px-1 py-2">
-        <p className="text-foreground-muted text-center font-mono text-xs">v{serverVersion}</p>
-        <p className="text-xxs text-foreground-subdued text-center italic">{installSource}</p>
+        <VersionFooter serverVersion={serverVersion} installSource={installSource} />
       </div>
     </div>
   )

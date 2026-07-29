@@ -3,17 +3,27 @@ import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { cache } from 'react'
 import {
+  AudibleChapterSearchResult,
+  AudioBookmark,
+  AuthenticationSettings,
+  AuthenticationSettingsPatch,
   Author,
   AuthorImagePayload,
   AuthorQuickMatchPayload,
   AuthorResponse,
   AuthorUpdateResponse,
   BookSearchResult,
+  Chapter,
   Collection,
+  OrderedTrackFileData,
   CreateApiKeyPayload,
   CreateCustomMetadataProviderPayload,
   CreateCustomMetadataProviderResponse,
+  CreatePodcastPayload,
+  CreatePodcastsFromOpmlPayload,
   CreateUpdateApiKeyResponse,
+  EmailSettingsFormFields,
+  EReaderDevice,
   FetchPodcastFeedResponse,
   FFProbeData,
   GetApiKeysResponse,
@@ -21,40 +31,65 @@ import {
   GetBackupsResponse,
   GetCollectionsResponse,
   GetCustomMetadataProvidersResponse,
+  GetEmailSettingsResponse,
   GetFilesystemPathsResponse,
   GetLibrariesResponse,
   GetLibraryItemsResponse,
   GetListeningSessionsResponse,
   GetLoggerDataResponse,
   GetNarratorsResponse,
+  GetNotificationsResponse,
   GetOpenListeningSessionsResponse,
   GetPlaylistsResponse,
+  GetEpisodeDownloadQueueResponse,
+  GetRecentEpisodesResponse,
+  GetPodcastTitlesResponse,
   GetRssFeedsResponse,
   GetSeriesResponse,
   GetUsersResponse,
   Library,
   LibraryFilterData,
   LibraryItem,
+  LibraryStatsResponse,
   ListeningStats,
+  M4bEncodeOptions,
   MediaItemShare,
+  MetadataObject,
   MetadataProvidersResponse,
   MutateBackupsResponse,
+  NotificationFormPayload,
+  NotificationSettings,
+  NotificationSettingsPatch,
+  NotificationUpdatePayload,
   OpenMediaItemSharePayload,
   OpenRssFeedPayload,
   OpenRssFeedResponse,
+  ParseOpmlFeedsResponse,
   PersonalizedShelf,
   Playlist,
   PlaylistItemPayload,
+  PodcastEpisode,
+  PodcastLibraryItem,
   PodcastSearchResult,
   RssPodcastEpisode,
   SaveLibraryOrderApiResponse,
   SearchLibraryResponse,
+  SearchPodcastEpisodeResponse,
+  SearchPodcastEpisodeResult,
   Series,
   ServerStatus,
   TasksResponse,
   UpdateAuthorPayload,
+  UpdateAuthSettingsResponse,
+  UpdateChaptersResponse,
+  UpdateEmailSettingsResponse,
+  UpdateEReaderDevicesResponse,
   UpdateLibraryItemMediaPayload,
   UpdateLibraryItemMediaResponse,
+  BatchGetLibraryItemsResponse,
+  BatchUpdateLibraryItemPayload,
+  BatchUpdateLibraryItemsResponse,
+  UpdatePodcastEpisodePayload,
   UploadCoverResponse,
   User,
   UserLoginResponse
@@ -348,7 +383,7 @@ export const getData = cache(async <T extends Promise<unknown>[]>(...promises: T
 /**
  * Current user response data
  *
- * call revalidateTag('current-user') when server settings change or user is updated
+ * call updateTag('current-user') when server settings change or user is updated
  */
 export const getCurrentUser = cache(async (): Promise<UserLoginResponse> => {
   return apiRequest<UserLoginResponse>('/api/authorize', {
@@ -366,19 +401,19 @@ export const getServerStatus = cache(async (): Promise<ServerStatus> => {
 })
 
 export const getLibraries = cache(async (): Promise<GetLibrariesResponse> => {
-  return apiRequest<GetLibrariesResponse>('/api/libraries', {})
+  return apiRequest<GetLibrariesResponse>('/api/libraries')
 })
 
 export const getLibrary = cache(async (libraryId: string): Promise<Library> => {
-  return apiRequest<Library>(`/api/libraries/${libraryId}`, {})
+  return apiRequest<Library>(`/api/libraries/${libraryId}`)
 })
 
 export const getLibraryPersonalized = cache(async (libraryId: string): Promise<PersonalizedShelf[]> => {
-  return apiRequest<PersonalizedShelf[]>(`/api/libraries/${libraryId}/personalized?include=rssfeed,share`, {})
+  return apiRequest<PersonalizedShelf[]>(`/api/libraries/${libraryId}/personalized?include=rssfeed,share`)
 })
 
 export const getLibraryItems = cache(async (libraryId: string, queryParams?: string): Promise<GetLibraryItemsResponse> => {
-  return apiRequest<GetLibraryItemsResponse>(`/api/libraries/${libraryId}/items${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetLibraryItemsResponse>(`/api/libraries/${libraryId}/items${queryParams ? `?${queryParams}` : ''}`)
 })
 
 /**
@@ -386,7 +421,7 @@ export const getLibraryItems = cache(async (libraryId: string, queryParams?: str
  * Used for populating filter dropdown menus
  */
 export async function getLibraryFilterData(libraryId: string): Promise<LibraryFilterData> {
-  return apiRequest<LibraryFilterData>(`/api/libraries/${libraryId}/filterdata`, {})
+  return apiRequest<LibraryFilterData>(`/api/libraries/${libraryId}/filterdata`)
 }
 
 /**
@@ -399,8 +434,36 @@ export const getLibraryItem = cache(async (itemId: string, expanded?: boolean, i
   const params = new URLSearchParams()
   params.set('expanded', expanded ? '1' : '0')
   if (include) params.set('include', include)
-  return apiRequest<LibraryItem>(`/api/items/${itemId}?${params.toString()}`, {})
+  return apiRequest<LibraryItem>(`/api/items/${itemId}?${params.toString()}`)
 })
+
+/**
+ * Update chapters for a library item
+ */
+export async function updateChapters(libraryItemId: string, chapters: Chapter[]): Promise<UpdateChaptersResponse> {
+  return apiRequest<UpdateChaptersResponse>(`/api/items/${libraryItemId}/chapters`, {
+    method: 'POST',
+    body: JSON.stringify({ chapters })
+  })
+}
+
+/**
+ * Update track order and exclude flags for a library item
+ */
+export async function updateTracks(libraryItemId: string, orderedFileData: OrderedTrackFileData[]): Promise<void> {
+  await apiRequest(`/api/items/${libraryItemId}/tracks`, {
+    method: 'PATCH',
+    body: JSON.stringify({ orderedFileData })
+  })
+}
+
+/**
+ * Search Audible chapters by ASIN and region
+ */
+export async function searchChapters(asin: string, region: string): Promise<AudibleChapterSearchResult> {
+  const params = new URLSearchParams({ asin, region })
+  return apiRequest<AudibleChapterSearchResult>(`/api/search/chapters?${params.toString()}`)
+}
 
 /**
  * Get FFProbe data for an audio file
@@ -410,15 +473,15 @@ export const getLibraryItem = cache(async (itemId: string, expanded?: boolean, i
  * Returns: FFProbe data object
  */
 export async function getAudioFileFFProbeData(itemId: string, fileIno: string): Promise<FFProbeData> {
-  return apiRequest<FFProbeData>(`/api/items/${itemId}/ffprobe/${fileIno}`, {})
+  return apiRequest<FFProbeData>(`/api/items/${itemId}/ffprobe/${fileIno}`)
 }
 
 export const getUsers = cache(async (queryParams?: string): Promise<GetUsersResponse> => {
-  return apiRequest<GetUsersResponse>(`/api/users${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetUsersResponse>(`/api/users${queryParams ? `?${queryParams}` : ''}`)
 })
 
 export const getUser = cache(async (userId: string): Promise<User> => {
-  return apiRequest<User>(`/api/users/${userId}`, {})
+  return apiRequest<User>(`/api/users/${userId}`)
 })
 
 export const deleteUser = cache(async (userId: string): Promise<void> => {
@@ -504,7 +567,7 @@ export async function searchLibrary(libraryId: string, query: string, limit?: nu
     params.set('limit', limit.toString())
   }
 
-  return apiRequest<SearchLibraryResponse>(`/api/libraries/${libraryId}/search?${params.toString()}`, {})
+  return apiRequest<SearchLibraryResponse>(`/api/libraries/${libraryId}/search?${params.toString()}`)
 }
 
 //
@@ -516,56 +579,64 @@ export async function searchLibrary(libraryId: string, query: string, limit?: nu
  * Returns: Object with providers for books, book covers, and podcasts
  */
 export const getMetadataProviders = cache(async (): Promise<MetadataProvidersResponse> => {
-  return apiRequest<MetadataProvidersResponse>('/api/search/providers', {})
+  return apiRequest<MetadataProvidersResponse>('/api/search/providers')
 })
 
 export const getTags = cache(async () => {
-  return apiRequest<{ tags: string[] }>('/api/tags', {})
+  return apiRequest<{ tags: string[] }>('/api/tags')
 })
 
 export const getGenres = cache(async () => {
-  return apiRequest<{ genres: string[] }>('/api/genres', {})
+  return apiRequest<{ genres: string[] }>('/api/genres')
 })
 
 export const getNarrators = cache(async (libraryId: string) => {
-  return apiRequest<GetNarratorsResponse>(`/api/libraries/${libraryId}/narrators`, {})
+  return apiRequest<GetNarratorsResponse>(`/api/libraries/${libraryId}/narrators`)
 })
 
 export const getAuthor = cache(async (authorId: string, queryParams?: string): Promise<Author> => {
-  return apiRequest<Author>(`/api/authors/${authorId}${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<Author>(`/api/authors/${authorId}${queryParams ? `?${queryParams}` : ''}`)
 })
 
 export const getPlaylist = cache(async (playlistId: string): Promise<Playlist> => {
-  return apiRequest<Playlist>(`/api/playlists/${playlistId}`, {})
+  return apiRequest<Playlist>(`/api/playlists/${playlistId}`)
 })
 
 export const getCollection = cache(async (collectionId: string): Promise<Collection> => {
-  return apiRequest<Collection>(`/api/collections/${collectionId}?include=rssfeed`, {})
+  return apiRequest<Collection>(`/api/collections/${collectionId}?include=rssfeed`)
 })
 
 export const getSeries = cache(async (libraryId: string, seriesId: string): Promise<Series> => {
-  return apiRequest<Series>(`/api/libraries/${libraryId}/series/${seriesId}?include=rssfeed`, {})
+  return apiRequest<Series>(`/api/libraries/${libraryId}/series/${seriesId}?include=progress,rssfeed`)
 })
 
 // Paginated entity list functions for bookshelf views
 export const getLibrarySeries = cache(async (libraryId: string, queryParams?: string): Promise<GetSeriesResponse> => {
-  return apiRequest<GetSeriesResponse>(`/api/libraries/${libraryId}/series${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetSeriesResponse>(`/api/libraries/${libraryId}/series${queryParams ? `?${queryParams}` : ''}`)
 })
 
 export const getLibraryAuthors = cache(async (libraryId: string, queryParams?: string): Promise<GetAuthorsResponse> => {
-  return apiRequest<GetAuthorsResponse>(`/api/libraries/${libraryId}/authors${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetAuthorsResponse>(`/api/libraries/${libraryId}/authors${queryParams ? `?${queryParams}` : ''}`)
 })
 
 export const getLibraryCollections = cache(async (libraryId: string, queryParams?: string): Promise<GetCollectionsResponse> => {
-  return apiRequest<GetCollectionsResponse>(`/api/libraries/${libraryId}/collections${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetCollectionsResponse>(`/api/libraries/${libraryId}/collections${queryParams ? `?${queryParams}` : ''}`)
 })
 
 export const getLibraryPlaylists = cache(async (libraryId: string, queryParams?: string): Promise<GetPlaylistsResponse> => {
-  return apiRequest<GetPlaylistsResponse>(`/api/libraries/${libraryId}/playlists${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetPlaylistsResponse>(`/api/libraries/${libraryId}/playlists${queryParams ? `?${queryParams}` : ''}`)
+})
+
+export const getRecentEpisodes = cache(async (libraryId: string, limit = 50, page = 0): Promise<GetRecentEpisodesResponse> => {
+  return apiRequest<GetRecentEpisodesResponse>(`/api/libraries/${libraryId}/recent-episodes?limit=${limit}&page=${page}`)
+})
+
+export const getEpisodeDownloadQueue = cache(async (libraryId: string): Promise<GetEpisodeDownloadQueueResponse> => {
+  return apiRequest<GetEpisodeDownloadQueueResponse>(`/api/libraries/${libraryId}/episode-downloads`)
 })
 
 export const getApiKeys = cache(async (): Promise<GetApiKeysResponse> => {
-  return apiRequest<GetApiKeysResponse>('/api/api-keys', {})
+  return apiRequest<GetApiKeysResponse>('/api/api-keys')
 })
 
 export const deleteApiKey = cache(async (apiKeyId: string): Promise<void> => {
@@ -589,11 +660,11 @@ export async function updateApiKey(apiKeyId: string, payload: CreateApiKeyPayloa
 }
 
 export const getRssFeeds = cache(async (): Promise<GetRssFeedsResponse> => {
-  return apiRequest<GetRssFeedsResponse>('/api/feeds', {})
+  return apiRequest<GetRssFeedsResponse>('/api/feeds')
 })
 
 export const getCustomMetadataProviders = cache(async (): Promise<GetCustomMetadataProvidersResponse> => {
-  return apiRequest<GetCustomMetadataProvidersResponse>('/api/custom-metadata-providers', {})
+  return apiRequest<GetCustomMetadataProvidersResponse>('/api/custom-metadata-providers')
 })
 
 export const deleteCustomMetadataProvider = cache(async (providerId: string): Promise<void> => {
@@ -641,7 +712,7 @@ export async function closeMediaItemShare(shareId: string): Promise<void> {
 }
 
 export const getBackups = cache(async (): Promise<GetBackupsResponse> => {
-  return apiRequest<GetBackupsResponse>('/api/backups', {})
+  return apiRequest<GetBackupsResponse>('/api/backups')
 })
 
 export async function createBackup(): Promise<MutateBackupsResponse> {
@@ -663,11 +734,11 @@ export async function applyBackup(backupId: string): Promise<void> {
 }
 
 export const getListeningSessions = cache(async (queryParams?: string): Promise<GetListeningSessionsResponse> => {
-  return apiRequest<GetListeningSessionsResponse>(`/api/sessions${queryParams ? `?${queryParams}` : ''}`, {})
+  return apiRequest<GetListeningSessionsResponse>(`/api/sessions${queryParams ? `?${queryParams}` : ''}`)
 })
 
 export const getOpenListeningSessions = cache(async (): Promise<GetOpenListeningSessionsResponse> => {
-  return apiRequest<GetOpenListeningSessionsResponse>('/api/sessions/open', {})
+  return apiRequest<GetOpenListeningSessionsResponse>('/api/sessions/open')
 })
 
 export async function deleteListeningSession(sessionId: string): Promise<void> {
@@ -690,7 +761,7 @@ export async function batchDeleteListeningSessions(sessionIds: string[]): Promis
 }
 
 export const getLoggerData = cache(async (): Promise<GetLoggerDataResponse> => {
-  return apiRequest<GetLoggerDataResponse>('/api/logger-data', {})
+  return apiRequest<GetLoggerDataResponse>('/api/logger-data')
 })
 
 /**
@@ -716,7 +787,7 @@ export async function searchBooks(provider: string, title: string, author?: stri
     params.set('id', libraryItemId)
   }
 
-  return apiRequest<BookSearchResult[]>(`/api/search/books?${params.toString()}`, {})
+  return apiRequest<BookSearchResult[]>(`/api/search/books?${params.toString()}`)
 }
 
 /**
@@ -724,12 +795,40 @@ export async function searchBooks(provider: string, title: string, author?: stri
  * @param term - Search term or RSS feed URL
  * Returns: Array of podcast match results
  */
-export async function searchPodcasts(term: string): Promise<PodcastSearchResult[]> {
+export async function searchPodcasts(term: string, country = 'us'): Promise<PodcastSearchResult[]> {
   const params = new URLSearchParams({
-    term: term.trim()
+    term: term.trim(),
+    country
   })
 
-  return apiRequest<PodcastSearchResult[]>(`/api/search/podcast?${params.toString()}`, {})
+  return apiRequest<PodcastSearchResult[]>(`/api/search/podcast?${params.toString()}`)
+}
+
+/**
+ * Get podcast titles in a library (for add-podcast duplicate detection)
+ */
+export async function getPodcastTitles(libraryId: string): Promise<GetPodcastTitlesResponse> {
+  return apiRequest<GetPodcastTitlesResponse>(`/api/libraries/${libraryId}/podcast-titles`)
+}
+
+/**
+ * Parse OPML text into RSS feed entries
+ */
+export async function parseOpmlFeeds(opmlText: string): Promise<ParseOpmlFeedsResponse> {
+  return apiRequest<ParseOpmlFeedsResponse>(`/api/podcasts/opml/parse`, {
+    method: 'POST',
+    body: JSON.stringify({ opmlText })
+  })
+}
+
+/**
+ * Bulk create podcasts from OPML feed URLs (runs as a background task on the server)
+ */
+export async function createPodcastsFromOpml(payload: CreatePodcastsFromOpmlPayload): Promise<void> {
+  return apiRequest<void>(`/api/podcasts/opml/create`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
 }
 
 /**
@@ -742,6 +841,20 @@ export async function updateLibraryItemMedia(libraryItemId: string, updatePayloa
   return apiRequest<UpdateLibraryItemMediaResponse>(`/api/items/${libraryItemId}/media`, {
     method: 'PATCH',
     body: JSON.stringify(updatePayload)
+  })
+}
+
+export async function batchGetLibraryItems(libraryItemIds: string[]): Promise<BatchGetLibraryItemsResponse> {
+  return apiRequest<BatchGetLibraryItemsResponse>('/api/items/batch/get', {
+    method: 'POST',
+    body: JSON.stringify({ libraryItemIds })
+  })
+}
+
+export async function batchUpdateLibraryItems(payload: BatchUpdateLibraryItemPayload[]): Promise<BatchUpdateLibraryItemsResponse> {
+  return apiRequest<BatchUpdateLibraryItemsResponse>('/api/items/batch/update', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   })
 }
 
@@ -761,12 +874,94 @@ export async function updateMediaFinished(libraryItemId: string, payload: { isFi
 }
 
 /**
+ * Toggle primary/supplementary status for an ebook file
+ */
+export async function updateEbookFileStatus(libraryItemId: string, fileIno: string): Promise<void> {
+  return apiRequest<void>(`/api/items/${libraryItemId}/ebook/${fileIno}/status`, {
+    method: 'PATCH'
+  })
+}
+
+/**
+ * Update ebook reading progress for a library item
+ */
+export async function updateEbookProgress(libraryItemId: string, payload: { ebookLocation?: string | number; ebookProgress?: number }): Promise<void> {
+  return apiRequest<void>(`/api/me/progress/${libraryItemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
  * Batch update media finished state for multiple items or episodes
  */
 export async function batchUpdateMediaFinished(payload: { libraryItemId: string; episodeId?: string; isFinished: boolean }[]): Promise<void> {
   return apiRequest<void>('/api/me/progress/batch/update', {
     method: 'PATCH',
     body: JSON.stringify(payload)
+  })
+}
+
+export interface BatchQuickMatchOptions {
+  provider?: string
+  overrideCover?: boolean
+  overrideDetails?: boolean
+}
+
+export async function batchDeleteLibraryItems(libraryItemIds: string[], hardDelete: boolean): Promise<void> {
+  return apiRequest<void>(`/api/items/batch/delete?hard=${hardDelete ? 1 : 0}`, {
+    method: 'POST',
+    body: JSON.stringify({ libraryItemIds })
+  })
+}
+
+export async function batchScanLibraryItems(libraryItemIds: string[]): Promise<void> {
+  return apiRequest<void>('/api/items/batch/scan', {
+    method: 'POST',
+    body: JSON.stringify({ libraryItemIds })
+  })
+}
+
+export async function batchQuickMatchLibraryItems(libraryItemIds: string[], options: BatchQuickMatchOptions): Promise<void> {
+  return apiRequest<void>('/api/items/batch/quickmatch', {
+    method: 'POST',
+    body: JSON.stringify({ libraryItemIds, options })
+  })
+}
+
+export async function batchEmbedMetadata(libraryItemIds: string[]): Promise<void> {
+  return apiRequest<void>('/api/tools/batch/embed-metadata', {
+    method: 'POST',
+    body: JSON.stringify({ libraryItemIds })
+  })
+}
+
+/**
+ * Create a bookmark at a specific time for a library item
+ */
+export async function createBookmark(libraryItemId: string, payload: { time: number; title: string }): Promise<AudioBookmark> {
+  return apiRequest<AudioBookmark>(`/api/me/item/${libraryItemId}/bookmark`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * Update a bookmark title for a library item
+ */
+export async function updateBookmark(libraryItemId: string, payload: { time: number; title: string }): Promise<AudioBookmark> {
+  return apiRequest<AudioBookmark>(`/api/me/item/${libraryItemId}/bookmark`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * Remove a bookmark at a specific time for a library item
+ */
+export async function removeBookmark(libraryItemId: string, time: number): Promise<void> {
+  return apiRequest<void>(`/api/me/item/${libraryItemId}/bookmark/${time}`, {
+    method: 'DELETE'
   })
 }
 
@@ -789,11 +984,96 @@ export async function sendEbookToDevice(payload: { libraryItemId: string; device
   })
 }
 
+export const getEmailSettings = cache(async (): Promise<GetEmailSettingsResponse> => {
+  return apiRequest<GetEmailSettingsResponse>('/api/emails/settings')
+})
+
+export async function updateEmailSettings(payload: EmailSettingsFormFields): Promise<UpdateEmailSettingsResponse> {
+  return apiRequest<UpdateEmailSettingsResponse>('/api/emails/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function sendTestEmail(): Promise<void> {
+  return apiRequest<void>('/api/emails/test', {
+    method: 'POST'
+  })
+}
+
+export async function updateEReaderDevices(ereaderDevices: EReaderDevice[]): Promise<UpdateEReaderDevicesResponse> {
+  return apiRequest<UpdateEReaderDevicesResponse>('/api/emails/ereader-devices', {
+    method: 'POST',
+    body: JSON.stringify({ ereaderDevices })
+  })
+}
+
+export const getAuthSettings = cache(async (): Promise<AuthenticationSettings> => {
+  return apiRequest<AuthenticationSettings>('/api/auth-settings')
+})
+
+export async function updateAuthSettings(payload: AuthenticationSettingsPatch): Promise<UpdateAuthSettingsResponse> {
+  return apiRequest<UpdateAuthSettingsResponse>('/api/auth-settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+export const getNotifications = cache(async (): Promise<GetNotificationsResponse> => {
+  return apiRequest<GetNotificationsResponse>('/api/notifications')
+})
+
+export async function updateNotificationSettings(payload: NotificationSettingsPatch): Promise<void> {
+  return apiRequest<void>('/api/notifications', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function createNotification(payload: NotificationFormPayload): Promise<NotificationSettings> {
+  return apiRequest<NotificationSettings>('/api/notifications', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function updateNotification(id: string, payload: NotificationUpdatePayload): Promise<NotificationSettings> {
+  return apiRequest<NotificationSettings>(`/api/notifications/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+export async function deleteNotification(id: string): Promise<NotificationSettings> {
+  return apiRequest<NotificationSettings>(`/api/notifications/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/** Send test data through a notification config */
+export async function testNotification(id: string): Promise<void> {
+  return apiRequest<void>(`/api/notifications/${id}/test`)
+}
+
+/** Trigger the onTest event (optional ?fail=1) */
+export async function triggerOnTestEvent(fail = false): Promise<void> {
+  return apiRequest<void>(`/api/notifications/test?fail=${fail ? 1 : 0}`)
+}
+
 /**
- * Remove a series from the "continue listening" shelf
+ * Remove a series from the "continue series" shelf
  */
 export async function removeSeriesFromContinueListening(seriesId: string): Promise<void> {
   return apiRequest<void>(`/api/me/series/${seriesId}/remove-from-continue-listening`, {
+    method: 'GET'
+  })
+}
+
+/**
+ * Re-add a series to the "continue series" shelf
+ */
+export async function readdSeriesToContinueListening(seriesId: string): Promise<void> {
+  return apiRequest<void>(`/api/me/series/${seriesId}/readd-to-continue-listening`, {
     method: 'GET'
   })
 }
@@ -829,6 +1109,34 @@ export async function deleteLibraryItemMediaEpisode(libraryItemId: string, episo
 }
 
 /**
+ * Fetch a single podcast episode with full details.
+ */
+export async function getPodcastEpisode(libraryItemId: string, episodeId: string): Promise<PodcastEpisode> {
+  return apiRequest<PodcastEpisode>(`/api/podcasts/${libraryItemId}/episode/${episodeId}`)
+}
+
+/**
+ * Update podcast episode metadata.
+ */
+export async function updatePodcastEpisode(libraryItemId: string, episodeId: string, payload: UpdatePodcastEpisodePayload): Promise<PodcastLibraryItem> {
+  return apiRequest<PodcastLibraryItem>(`/api/podcasts/${libraryItemId}/episode/${episodeId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * Search RSS feed for episodes matching a title.
+ */
+export async function searchPodcastEpisode(libraryItemId: string, title: string): Promise<{ episodes: SearchPodcastEpisodeResult[] }> {
+  const params = new URLSearchParams({ title })
+  const response = await apiRequest<SearchPodcastEpisodeResponse>(`/api/podcasts/${libraryItemId}/search-episode?${params.toString()}`)
+  return {
+    episodes: (response.episodes || []).map((item) => item.episode)
+  }
+}
+
+/**
  * Fetch podcast feed using an RSS URL
  * @param rssFeed - RSS Feed URL
  */
@@ -836,6 +1144,16 @@ export async function fetchPodcastFeed(rssFeed: string): Promise<FetchPodcastFee
   return apiRequest<FetchPodcastFeedResponse>(`/api/podcasts/feed`, {
     method: 'POST',
     body: JSON.stringify({ rssFeed })
+  })
+}
+
+/**
+ * Create a podcast library item
+ */
+export async function createPodcast(payload: CreatePodcastPayload): Promise<LibraryItem> {
+  return apiRequest<LibraryItem>(`/api/podcasts`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
   })
 }
 
@@ -873,11 +1191,56 @@ export async function embedMetadataQuick(libraryItemId: string): Promise<void> {
 }
 
 /**
+ * Get the metadata object that would be embedded into audio files
+ * @param libraryItemId - Library item ID
+ */
+export async function getMetadataObject(libraryItemId: string): Promise<MetadataObject> {
+  return apiRequest<MetadataObject>(`/api/items/${libraryItemId}/metadata-object`)
+}
+
+/**
+ * Embed metadata into audio files with optional backup
+ * @param libraryItemId - Library item ID
+ * @param backup - Whether to backup audio files before embedding
+ */
+export async function embedMetadata(libraryItemId: string, backup: boolean): Promise<void> {
+  return apiRequest<void>(`/api/tools/item/${libraryItemId}/embed-metadata?backup=${backup ? 1 : 0}`, {
+    method: 'POST'
+  })
+}
+
+/**
+ * Start M4B encode for a library item
+ * @param libraryItemId - Library item ID
+ * @param options - Encoding options (bitrate, channels, codec)
+ */
+export async function encodeM4b(libraryItemId: string, options: M4bEncodeOptions): Promise<void> {
+  const params = new URLSearchParams({
+    bitrate: options.bitrate,
+    channels: String(options.channels),
+    codec: options.codec
+  })
+  return apiRequest<void>(`/api/tools/item/${libraryItemId}/encode-m4b?${params.toString()}`, {
+    method: 'POST'
+  })
+}
+
+/**
+ * Cancel an in-progress M4B encode for a library item
+ * @param libraryItemId - Library item ID
+ */
+export async function cancelM4bEncode(libraryItemId: string): Promise<void> {
+  return apiRequest<void>(`/api/tools/item/${libraryItemId}/encode-m4b`, {
+    method: 'DELETE'
+  })
+}
+
+/**
  * Get all tasks with optional queue data
  * Returns: Tasks array and queued task data
  */
 export async function getTasks(): Promise<TasksResponse> {
-  return apiRequest<TasksResponse>('/api/tasks?include=queue', {})
+  return apiRequest<TasksResponse>('/api/tasks?include=queue')
 }
 
 //
@@ -989,13 +1352,27 @@ export async function removeBookFromCollection(collectionId: string, libraryItem
   })
 }
 
+export async function batchAddBooksToCollection(collectionId: string, books: string[]): Promise<Collection> {
+  return apiRequest<Collection>(`/api/collections/${collectionId}/batch/add`, {
+    method: 'POST',
+    body: JSON.stringify({ books })
+  })
+}
+
+export async function batchRemoveBooksFromCollection(collectionId: string, books: string[]): Promise<Collection> {
+  return apiRequest<Collection>(`/api/collections/${collectionId}/batch/remove`, {
+    method: 'POST',
+    body: JSON.stringify({ books })
+  })
+}
+
 /**
  * Update a collection
  * @param collectionId - Collection ID
  * @param payload - Update payload with name and/or description
  * Returns: Updated collection
  */
-export async function updateCollection(collectionId: string, payload: { name?: string; description?: string }): Promise<Collection> {
+export async function updateCollection(collectionId: string, payload: { name?: string; description?: string | null; books?: string[] }): Promise<Collection> {
   return apiRequest<Collection>(`/api/collections/${collectionId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
@@ -1021,6 +1398,23 @@ export async function deleteCollection(collectionId: string): Promise<void> {
 export async function createPlaylistFromCollection(collectionId: string): Promise<{ id: string }> {
   return apiRequest<{ id: string }>(`/api/playlists/collection/${collectionId}`, {
     method: 'POST'
+  })
+}
+
+/**
+ * Update a playlist (name, description, item order)
+ */
+export async function updatePlaylist(
+  playlistId: string,
+  payload: {
+    name?: string
+    description?: string | null
+    items?: PlaylistItemPayload[]
+  }
+): Promise<Playlist> {
+  return apiRequest<Playlist>(`/api/playlists/${playlistId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
   })
 }
 
@@ -1141,4 +1535,12 @@ export async function removeAuthorImage(authorId: string): Promise<AuthorRespons
   return apiRequest<AuthorResponse>(`/api/authors/${authorId}/image`, {
     method: 'DELETE'
   })
+}
+
+/**
+ * Get library statistics for a given library ID
+ * Returns: @LibraryStatsResponse with counts of items, authors, genres, etc.
+ */
+export async function getLibraryStats(libraryId: string): Promise<LibraryStatsResponse> {
+  return apiRequest<LibraryStatsResponse>(`/api/libraries/${libraryId}/stats`)
 }

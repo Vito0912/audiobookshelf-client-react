@@ -51,14 +51,14 @@ export default function LibraryScheduleTab({ settings, onSettingsChange }: Libra
     <div className="mb-4 h-full w-full px-1 py-1 md:px-4">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-foreground text-base md:text-lg">{t('HeaderScheduleLibraryScans')}</h2>
-        <Checkbox value={enableAutoScan} onChange={handleToggleEnable} label={t('LabelEnable')} size="medium" />
+        <Checkbox value={enableAutoScan} onChange={handleToggleEnable} label={t('LabelEnable')} size="medium" checkboxBgClass="bg-primary" />
       </div>
 
       {enableAutoScan ? (
-        <>
+        <div className="flex flex-col gap-2">
           <CronExpressionBuilder value={cronExpression} onChange={handleCronChange} />
           <CronExpressionPreview cronExpression={cronExpression} isValid={isValid} />
-        </>
+        </div>
       ) : (
         <p className="text-base text-yellow-400">{t('MessageScheduleLibraryScanNote')}</p>
       )}

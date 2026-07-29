@@ -25,6 +25,7 @@ interface ContextMenuDropdownProps<T = string> {
   iconClass?: string
   menuWidth?: number
   processing?: boolean
+  isOpen?: boolean
   onAction?: (params: { action: string; data?: Record<string, T> }) => void
   onOpenChange?: (isOpen: boolean) => void
   menuAlign?: 'right' | 'left'
@@ -34,6 +35,8 @@ interface ContextMenuDropdownProps<T = string> {
   borderless?: boolean
   className?: string
   usePortal?: boolean
+  /** Extra click targets that should not close the menu (e.g. sibling overlay buttons on a media card). */
+  isAdditionalInside?: (target: Node) => boolean
 }
 
 /**
@@ -46,6 +49,7 @@ export default function ContextMenuDropdown<T = string>({
   iconClass = '',
   menuWidth = 96,
   processing = false,
+  isOpen: isOpenProp,
   onAction,
   onOpenChange,
   menuAlign = 'right',
@@ -54,10 +58,13 @@ export default function ContextMenuDropdown<T = string>({
   size = 'medium',
   borderless = false,
   className,
-  usePortal = false
+  usePortal = false,
+  isAdditionalInside
 }: ContextMenuDropdownProps<T>) {
   const t = useTypeSafeTranslations()
-  const [showMenu, setShowMenu] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const isControlled = isOpenProp !== undefined
+  const showMenu = isControlled ? isOpenProp : uncontrolledOpen
   const menuWrapperRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [openSubmenuIndex, setOpenSubmenuIndex] = useState<number | null>(null)
@@ -67,10 +74,19 @@ export default function ContextMenuDropdown<T = string>({
   // Generate unique ID for this dropdown instance
   const dropdownId = useId()
 
+  const setMenuOpen = useCallback(
+    (isOpen: boolean) => {
+      if (!isControlled) {
+        setUncontrolledOpen(isOpen)
+      }
+      onOpenChange?.(isOpen)
+    },
+    [isControlled, onOpenChange]
+  )
+
   // Helper functions to manage menu state
   const openMenu = (index: number = 0) => {
-    setShowMenu(true)
-    onOpenChange?.(true)
+    setMenuOpen(true)
     setFocusedIndex(index)
     setFocusedSubIndex(-1)
     setOpenSubmenuIndex(null)
@@ -78,15 +94,14 @@ export default function ContextMenuDropdown<T = string>({
 
   // Keep useCallback for closeMenu since it's used in useClickOutside hook dependency
   const closeMenu = useCallback(() => {
-    setShowMenu(false)
-    onOpenChange?.(false)
+    setMenuOpen(false)
     setFocusedIndex(-1)
     setFocusedSubIndex(-1)
     setOpenSubmenuIndex(null)
-  }, [onOpenChange])
+  }, [setMenuOpen])
 
   // Handle click outside to close menu
-  useClickOutside(menuWrapperRef, buttonRef, closeMenu)
+  useClickOutside(menuWrapperRef, buttonRef, closeMenu, true, isAdditionalInside)
 
   const openSubMenu = (index: number) => {
     const currentItem = items[index]

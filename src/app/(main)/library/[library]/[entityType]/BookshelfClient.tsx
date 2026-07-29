@@ -17,17 +17,19 @@ import { ENTITY_CONFIGS } from './entity-config'
 
 interface BookshelfClientProps {
   entityType: EntityType
-  // Different APIs return different structures:
-  // - items/series/collections/playlists: { results: T[], total?: number }
-  // - authors: { authors: Author[], total?: number }
+  queryOverride?: string
+  /** When false, skip wiring toolbar extras and context menu into LibraryContext (caller owns the toolbar). Default true. */
+  registerToolbar?: boolean
 }
 
-export default function BookshelfClient({ entityType }: BookshelfClientProps) {
+export default function BookshelfClient({ entityType, queryOverride, registerToolbar = true }: BookshelfClientProps) {
   const t = useTypeSafeTranslations()
   const { library, setItemCount, orderBy, collapseSeries, showSubtitles, seriesSortBy, authorSortBy, updateSetting, filterBy, bookshelfView } = useLibrary()
   const { user } = useUser()
 
-  const { query } = useBookshelfQuery(entityType)
+  const usesExternalQuery = queryOverride !== undefined
+  const { query: defaultQuery } = useBookshelfQuery(entityType, !usesExternalQuery)
+  const query = queryOverride ?? defaultQuery
 
   const isRandomSort = useMemo(() => {
     if (entityType === 'items') return orderBy === 'random'
@@ -89,10 +91,6 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
   }, [sizeMultiplier, entityType])
 
   // Computed Layout derived from measurements
-  const shelfPadding = (dimensions.width < 640 ? 32 : 64) * sizeMultiplier
-  const cardMargin = 24 * sizeMultiplier
-  const totalEntityCardWidth = cardSize.width + cardMargin
-
   const isAlternativeBookshelfView = bookshelfView === BookshelfView.DETAIL
   // A standard bookshelf divider is 1.5rem (24px).
   // In alternative view there is no divider.
@@ -125,16 +123,14 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
 
   // Virtualizer
   const hasMeasuredCard = cardSize.width > 0
-  const { columns, shelfHeight, totalShelves, shelvesPerPage, visibleShelfStart, visibleShelfEnd, handleScroll, getVisiblePageRange } = useBookshelfVirtualizer(
-    {
+  const { columns, shelfHeight, totalShelves, shelvesPerPage, visibleShelfStart, visibleShelfEnd, handleScroll, getVisiblePageRange, columnGap } =
+    useBookshelfVirtualizer({
       totalEntities,
-      itemWidth: hasMeasuredCard ? totalEntityCardWidth : 0,
+      cardWidth: hasMeasuredCard ? cardSize.width : 0,
       itemHeight: hasMeasuredCard ? shelfRowHeight : 0,
       containerWidth: dimensions.width,
-      containerHeight: dimensions.height,
-      padding: shelfPadding / 2
-    }
-  )
+      containerHeight: dimensions.height
+    })
 
   // Use custom hook for persistent scroll logic
   const { handleScroll: handlePersistentScroll } = usePersistentScroll({
@@ -145,7 +141,9 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
 
   // Author actions hook
 
-  const bookshelfMarginLeft = Math.max(0, (dimensions.width - columns * totalEntityCardWidth) / 2)
+  const bookshelfRowWidth = hasMeasuredCard && columns > 0 ? columns * cardSize.width + Math.max(0, columns - 1) * columnGap : 0
+  const bookshelfInnerWidth = Math.max(0, dimensions.width - 2 * columnGap)
+  const bookshelfMarginLeft = columnGap + Math.max(0, (bookshelfInnerWidth - bookshelfRowWidth) / 2)
   const itemsPerPage = columns * shelvesPerPage
   const bookshelfLayoutReady = hasMeasuredCard && columns > 0 && Number.isFinite(itemsPerPage) && itemsPerPage > 0
 
@@ -167,6 +165,7 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
   useBookshelfUpdater({
     entityType,
     libraryId: library.id,
+    userId: user.id,
     containerRef,
     visibleShelfStart,
     visibleShelfEnd,
@@ -221,7 +220,7 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
   const config = validEntities.includes(entityType as string) ? ENTITY_CONFIGS[entityType] : null
 
   useEffect(() => {
-    if (!config) return
+    if (!config || !registerToolbar) return
     // Set up toolbar extras based on entity config
     setToolbarExtras(config.getToolbarExtras(user, library))
 
@@ -236,14 +235,27 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
 
     // Set up action handler (delegated to entity config)
     setContextMenuActionHandler((action: string) => {
-      config.handleContextMenuAction(action, { updateSetting })
+      config.handleContextMenuAction(action, { updateSetting, library })
     })
 
     return () => {
       setToolbarExtras(null)
       setContextMenuItems([])
     }
-  }, [entityType, config, setToolbarExtras, setContextMenuItems, setContextMenuActionHandler, updateSetting, library, showSubtitles, collapseSeries, user, t])
+  }, [
+    entityType,
+    config,
+    registerToolbar,
+    setToolbarExtras,
+    setContextMenuItems,
+    setContextMenuActionHandler,
+    updateSetting,
+    library,
+    showSubtitles,
+    collapseSeries,
+    user,
+    t
+  ])
 
   // Get empty state message based on entity config
   const getEmptyMessage = () => {
@@ -273,7 +285,7 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
       }}
     >
       {/* Measurement Dummy - Hidden but rendered for sizing */}
-      <div ref={dummyCardRef} style={{ position: 'absolute', visibility: 'hidden', top: 0, left: 0, zIndex: -1 }} aria-hidden="true">
+      <div ref={dummyCardRef} className="w-max" style={{ position: 'absolute', visibility: 'hidden', top: 0, left: 0, zIndex: -1 }} aria-hidden="true">
         <config.SkeletonComponent bookshelfView={bookshelfView} seriesSortBy={seriesSortBy} showSubtitles={showSubtitles} orderBy={orderBy} />
       </div>
 
@@ -314,7 +326,7 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
                   // To push the cards to the bottom of the flex container (and touch the divider), we align items to center and add some pt-6e equivalent to the cards or use items-end with padding-bottom for the divider.
                   // BookShelfRow uses pt-6e (24px) to push the content down. Then the divider is positioned exactly under it.
                   paddingTop: !isAlternativeBookshelfView ? `${16 * sizeMultiplier}px` : undefined,
-                  gap: `${cardMargin}px`
+                  gap: `${columnGap}px`
                 }}
               >
                 {shelfItems.map((item, k) => {
@@ -331,7 +343,7 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
                   const entityIndex = startIndex + k
                   return (
                     <config.CardComponent
-                      key={`card-wrapper-${item.id}`}
+                      key={`card-wrapper-${entityIndex}`}
                       entity={item}
                       bookshelfView={bookshelfView}
                       width={currentCardWidth}
@@ -343,6 +355,7 @@ export default function BookshelfClient({ entityType }: BookshelfClientProps) {
                       mediaItemProgressMap={mediaItemProgressMap}
                       shelfEntities={entityType === 'items' ? items : undefined}
                       entityIndex={entityType === 'items' ? entityIndex : undefined}
+                      bookshelfSelectionEnabled={entityType === 'items'}
                     />
                   )
                 })}

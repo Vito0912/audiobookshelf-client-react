@@ -1,109 +1,139 @@
-import Btn from '@/components/ui/Btn'
+import AddToPlaylistModal from '@/components/modals/AddToPlaylistModal'
 import Checkbox from '@/components/ui/Checkbox'
 import ContextMenuDropdown, { ContextMenuDropdownItem } from '@/components/ui/ContextMenuDropdown'
 import IconBtn from '@/components/ui/IconBtn'
-import ReadIconBtn from '@/components/ui/ReadIconBtn'
-import Tooltip from '@/components/ui/Tooltip'
 import ConfirmDialog, { type ConfirmState } from '@/components/widgets/ConfirmDialog'
+import PodcastEpisodeListenActions from '@/components/widgets/episode/PodcastEpisodeListenActions'
 import { useUser } from '@/contexts/UserContext'
+import { useEpisodeListenActions } from '@/hooks/usetEpisodeListenActions'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { openHardDeleteConfirm } from '@/lib/confirmDialogs'
 import { formatJsDate } from '@/lib/datefns'
-import { formatDuration } from '@/lib/formatDuration'
-import { MediaProgress, PodcastEpisode } from '@/types/api'
-import { useMemo, useState } from 'react'
+import { sanitizeEpisodeDescriptionHtml } from '@/lib/episode'
+import { buildEpisodeQueueItem, buildPodcastEpisodesQueueFromIndex } from '@/lib/playerQueue'
+import { PodcastEpisode, PodcastLibraryItem } from '@/types/api'
+import { useCallback, useMemo, useState } from 'react'
 
 /** Fixed height of a single episode row (px). Used by EpisodeTable virtualizer and minHeight. */
 export const EPISODE_ROW_HEIGHT_PX = 176
 
 export interface EpisodeRowProps {
   episode: PodcastEpisode
-  libraryItemId: string
+  libraryItem: PodcastLibraryItem
+  episodesInOrder: PodcastEpisode[]
+  episodeIndex: number
   sortKey: string
-  progress: MediaProgress | null
   isSelected: boolean
   isSelectionMode: boolean
   dateFormat: string
-  onPlay: (episode: PodcastEpisode) => void
   onView: (episode: PodcastEpisode) => void
-  onToggleFinished: (episode: PodcastEpisode) => void
-  onSelect: (episode: PodcastEpisode, isSelected: boolean) => void
+  onSelect: (episode: PodcastEpisode, isSelected: boolean, shiftKey?: boolean, rowIndex?: number) => void
   onEdit?: (episode: PodcastEpisode) => void
+  onMatch?: (episode: PodcastEpisode) => void
   onRemove?: (episode: PodcastEpisode, hardDelete: boolean) => void
   onDownloadFile?: (episode: PodcastEpisode) => void
   onShowMoreInfo?: (episode: PodcastEpisode) => void
-  onAddToPlaylist?: (episode: PodcastEpisode) => void
-  isPlayingThisEpisode: boolean
   rowIndex: number
 }
 
 export default function EpisodeRow({
   episode,
+  libraryItem,
+  episodesInOrder,
+  episodeIndex,
   sortKey,
-  progress,
   isSelected,
   isSelectionMode,
   dateFormat,
-  isPlayingThisEpisode,
-  onPlay,
   onView,
-  onToggleFinished,
   onSelect,
   onEdit,
+  onMatch,
   onRemove,
   onDownloadFile,
   onShowMoreInfo,
-  onAddToPlaylist,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   rowIndex
 }: EpisodeRowProps) {
   const t = useTypeSafeTranslations()
-  const { userCanUpdate, userCanDelete, userCanDownload, userIsAdminOrUp } = useUser()
+  const { user, userCanUpdate, userCanDelete, userCanDownload, userIsAdminOrUp } = useUser()
   const [isHovering, setIsHovering] = useState(false)
-  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
+  const [deleteConfirmState, setDeleteConfirmState] = useState<ConfirmState | null>(null)
+
+  const libraryItemId = libraryItem.id
+  const podcastTitle = libraryItem.media.metadata?.title ?? ''
+  const coverPath = libraryItem.media.coverPath ?? null
+
+  const captionForEpisode = useCallback(
+    (ep: PodcastEpisode) =>
+      ep.publishedAt ? t('LabelPublishedDate', { 0: formatJsDate(new Date(ep.publishedAt), dateFormat) }) : t('LabelUnknownPublishDate'),
+    [dateFormat, t]
+  )
+
+  const getQueueItems = useCallback(
+    () => buildPodcastEpisodesQueueFromIndex(episodesInOrder, libraryItem, user.mediaProgress, episodeIndex, captionForEpisode),
+    [captionForEpisode, episodeIndex, episodesInOrder, libraryItem, user.mediaProgress]
+  )
+
+  const buildQueueItem = useCallback(
+    () =>
+      buildEpisodeQueueItem({
+        libraryItem,
+        episode,
+        podcastTitle,
+        coverPath,
+        caption: captionForEpisode(episode)
+      }),
+    [captionForEpisode, coverPath, episode, libraryItem, podcastTitle]
+  )
+
+  const {
+    userIsFinished,
+    userProgressPercent,
+    episodeIsPlaying,
+    isQueued,
+    showQueueButton,
+    playButtonLabel,
+    isProcessingFinished,
+    playlistsModalOpen,
+    confirmState: finishedConfirmState,
+    handlePlay,
+    handleQueueToggle,
+    handleToggleFinished,
+    handleOpenPlaylist,
+    closePlaylistsModal,
+    closeConfirm: closeFinishedConfirm,
+    libraryId
+  } = useEpisodeListenActions({
+    libraryItemId,
+    episode,
+    itemTitle: episode.title,
+    getQueueItems,
+    buildQueueItem
+  })
 
   const contextMenuItems = useMemo(() => {
     const items: ContextMenuDropdownItem[] = []
+    if (userCanUpdate && onMatch) items.push({ text: t('HeaderMatch'), action: 'match' })
     if (userCanDownload) items.push({ text: t('LabelDownload'), action: 'download' })
     if (userIsAdminOrUp && episode.audioFile) items.push({ text: t('LabelMoreInfo'), action: 'more' })
     return items
-  }, [userCanDownload, userIsAdminOrUp, episode.audioFile, t])
+  }, [userCanDownload, userCanUpdate, userIsAdminOrUp, episode.audioFile, onMatch, t])
 
-  const closeConfirm = () => setConfirmState(null)
+  const closeDeleteConfirm = () => setDeleteConfirmState(null)
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setConfirmState({
-      isOpen: true,
+    openHardDeleteConfirm({
       message: t('MessageConfirmDeleteEpisode', { 0: episode.title }),
-      checkboxLabel: t('LabelDeleteFromFileSystemCheckbox'),
-      yesButtonText: t('ButtonDelete'),
-      yesButtonClassName: 'bg-error',
-      onConfirm: (hardDelete?: boolean) => {
-        setConfirmState(null)
-        onRemove?.(episode, !!hardDelete)
-      }
+      t,
+      setConfirmState: setDeleteConfirmState,
+      onDelete: (hardDelete) => onRemove?.(episode, hardDelete)
     })
   }
 
-  const userIsFinished = progress?.isFinished || false
-  const progressPercent = progress?.progress || 0
-  const streamIsPlaying = isPlayingThisEpisode
-
-  const timeRemaining = useMemo(() => {
-    if (streamIsPlaying) return t('ButtonPlaying')
-    if (!progress) return formatDuration(episode.audioTrack?.duration || 0, t)
-    if (userIsFinished) return t('LabelFinished')
-
-    const duration = progress.duration || episode.audioTrack?.duration || 0
-    const remaining = Math.floor(duration - (progress.currentTime || 0))
-    return t('LabelTimeLeft', { 0: formatDuration(remaining, t) })
-  }, [streamIsPlaying, progress, userIsFinished, episode.audioTrack?.duration, t])
-
   const publishedDate = episode.publishedAt ? formatJsDate(new Date(episode.publishedAt), dateFormat) : ''
 
-  // Stamp tabindex="-1" and pointer-events:none on all anchor tags in the raw HTML
-  // before injection. A post-mount effect is unreliable with virtual scrolling (row reuse).
-  const descriptionHtml = (episode.subtitle || episode.description || '').replace(/<a\b/gi, '<a tabindex="-1" style="pointer-events:none"')
+  const descriptionHtml = sanitizeEpisodeDescriptionHtml(episode.subtitle || episode.description || '')
 
   const handleRowClick = () => {
     onView(episode)
@@ -116,11 +146,9 @@ export default function EpisodeRow({
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
-        {/* Main content — keep onClick for mouse users, but let children dictate keyboard tab index */}
         <div className="flex h-full flex-col rounded-sm" onClick={handleRowClick}>
           <div className="flex min-h-0 w-full flex-1">
             <div className="flex min-w-0 grow flex-col justify-start">
-              {/* Title - serves as the primary keyboard target for opening the row */}
               <div dir="auto" className="relative flex h-10 w-full flex-shrink-0 items-center pe-2 break-words whitespace-normal">
                 <button
                   id={`btn-episode-${episode.id}`}
@@ -135,14 +163,12 @@ export default function EpisodeRow({
                 </button>
               </div>
 
-              {/* Subtitle/Description - This must shrink if title is 2 lines */}
               <div className="relative mt-1.5 mb-0.5 flex h-10 min-h-0 items-start overflow-hidden pe-12">
                 <div
                   dir="auto"
                   className="text-foreground-muted line-clamp-2 w-full text-sm leading-snug break-words whitespace-normal"
                   dangerouslySetInnerHTML={{ __html: descriptionHtml }}
                   onClick={(e) => {
-                    // If a link within the description was clicked, don't open the modal
                     if ((e.target as HTMLElement).tagName.toLowerCase() === 'a') {
                       e.stopPropagation()
                     }
@@ -150,23 +176,26 @@ export default function EpisodeRow({
                 />
               </div>
 
-              {/* Metadata row */}
               <div className="flex h-7 w-full flex-shrink-0 items-center">
                 {sortKey === 'audioFile.metadata.filename' ? (
                   <p className="text-foreground-muted truncate text-sm font-light">
                     <strong className="font-bold">{t('LabelFilename')}</strong>: {episode.audioFile?.metadata?.filename}
                   </p>
                 ) : (
-                  <div className="inline-flex w-full max-w-xl justify-between overflow-hidden pr-12">
-                    {episode.season && <p className="text-foreground-muted text-sm whitespace-nowrap">{t('LabelSeasonNumber', { 0: episode.season })}</p>}
-                    {episode.episode && <p className="text-foreground-muted text-sm whitespace-nowrap">{t('LabelEpisodeNumber', { 0: episode.episode })}</p>}
-                    {publishedDate && <p className="text-foreground-muted text-sm whitespace-nowrap">{t('LabelPublishedDate', { 0: publishedDate })}</p>}
+                  <div className="flex w-full max-w-xl min-w-0 items-center gap-x-3 overflow-hidden pr-12">
+                    {episode.season && <p className="text-foreground-muted shrink-0 text-sm">{t('LabelSeasonNumber', { 0: episode.season })}</p>}
+                    {episode.episode && <p className="text-foreground-muted shrink-0 text-sm">{t('LabelEpisodeNumber', { 0: episode.episode })}</p>}
+                    {publishedDate && (
+                      <p className="text-foreground-muted shrink-0 text-sm">
+                        <span className="sm:hidden">{publishedDate}</span>
+                        <span className="hidden sm:inline">{t('LabelPublishedDate', { 0: publishedDate })}</span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Selection checkbox area */}
             <div
               className={`absolute top-1/2 right-2 z-10 flex flex-shrink-0 -translate-y-1/2 items-center justify-center transition-opacity ${isHovering || isSelected || isSelectionMode ? 'opacity-100' : 'opacity-100 has-[:focus-visible]:opacity-100 md:opacity-0 md:has-[:focus-visible]:opacity-100'}`}
               onKeyDown={(e) => {
@@ -176,45 +205,24 @@ export default function EpisodeRow({
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <Checkbox value={isSelected} onChange={(checked) => onSelect(episode, checked)} />
+              <Checkbox value={isSelected} checkboxBgClass="bg-primary" onChange={(checked, shiftKey) => onSelect(episode, checked, shiftKey, rowIndex)} />
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="@container mt-auto flex w-full items-center justify-between gap-1">
-            <div className="flex w-full items-center gap-1">
-              <Btn
-                color="bg-transparent"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onPlay(episode)
-                }}
-                className={`border-foreground/20 hover:bg-foreground/10 flex-nowrap px-2 ${userIsFinished ? 'text-foreground/40' : 'text-foreground'}`}
-              >
-                <span className={`material-symbols fill text-xl sm:text-2xl ${streamIsPlaying ? '' : 'text-success'}`}>
-                  {streamIsPlaying ? 'pause' : 'play_arrow'}
-                </span>
-                <span className="pe-1 text-xs font-semibold whitespace-nowrap sm:text-sm">{timeRemaining}</span>
-              </Btn>
-
-              <Tooltip position="top" text={userIsFinished ? t('MessageMarkAsNotFinished') : t('MessageMarkAsFinished')} className="flex-shrink-0">
-                <div onClick={(e) => e.stopPropagation()}>
-                  <ReadIconBtn borderless isRead={userIsFinished} onClick={() => onToggleFinished(episode)} />
-                </div>
-              </Tooltip>
-
-              <Tooltip position="top" text={t('LabelAddToPlaylist')} className="flex-shrink-0">
-                <IconBtn
-                  borderless
-                  className="flex-shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onAddToPlaylist?.(episode)
-                  }}
-                >
-                  playlist_add
-                </IconBtn>
-              </Tooltip>
+            <div className="flex w-full items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <PodcastEpisodeListenActions
+                playButtonLabel={playButtonLabel}
+                isPlaying={episodeIsPlaying}
+                isFinished={userIsFinished}
+                isProcessingFinished={isProcessingFinished}
+                showQueueButton={showQueueButton}
+                isQueued={isQueued}
+                onPlay={handlePlay}
+                onQueueToggle={handleQueueToggle}
+                onToggleFinished={handleToggleFinished}
+                onAddToPlaylist={handleOpenPlaylist}
+              />
 
               {userCanUpdate && (
                 <IconBtn
@@ -235,14 +243,15 @@ export default function EpisodeRow({
                 </IconBtn>
               )}
 
-              {episode.audioFile && contextMenuItems.length > 0 && (
+              {contextMenuItems.length > 0 && (
                 <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
                   <ContextMenuDropdown
                     items={contextMenuItems}
                     autoWidth
                     borderless
                     onAction={({ action }) => {
-                      if (action === 'download') onDownloadFile?.(episode)
+                      if (action === 'match') onMatch?.(episode)
+                      else if (action === 'download') onDownloadFile?.(episode)
                       else if (action === 'more') onShowMoreInfo?.(episode)
                     }}
                     usePortal
@@ -253,20 +262,45 @@ export default function EpisodeRow({
           </div>
         </div>
 
-        {/* Progress bar */}
-        {!userIsFinished && progressPercent > 0 && <div className="bg-warning absolute bottom-0 left-0 h-0.5" style={{ width: `${progressPercent * 100}%` }} />}
+        {!userIsFinished && userProgressPercent > 0 && (
+          <div className="bg-warning absolute bottom-0 left-0 h-0.5" style={{ width: `${userProgressPercent * 100}%` }} />
+        )}
       </div>
 
-      {confirmState && (
+      {playlistsModalOpen && (
+        <AddToPlaylistModal
+          isOpen={playlistsModalOpen}
+          onClose={closePlaylistsModal}
+          libraryId={libraryId}
+          items={[{ libraryItemId, episodeId: episode.id }]}
+          headerTitle={episode.title}
+        />
+      )}
+
+      {finishedConfirmState && (
         <ConfirmDialog
-          isOpen={confirmState.isOpen}
-          message={confirmState.message}
-          checkboxLabel={confirmState.checkboxLabel}
-          yesButtonText={confirmState.yesButtonText}
-          yesButtonClassName={confirmState.yesButtonClassName}
-          onClose={closeConfirm}
+          isOpen={finishedConfirmState.isOpen}
+          message={finishedConfirmState.message}
+          checkboxLabel={finishedConfirmState.checkboxLabel}
+          yesButtonText={finishedConfirmState.yesButtonText}
+          yesButtonClassName={finishedConfirmState.yesButtonClassName}
+          onClose={closeFinishedConfirm}
           onConfirm={(value) => {
-            confirmState.onConfirm(value)
+            finishedConfirmState.onConfirm(value)
+          }}
+        />
+      )}
+
+      {deleteConfirmState && (
+        <ConfirmDialog
+          isOpen={deleteConfirmState.isOpen}
+          message={deleteConfirmState.message}
+          checkboxLabel={deleteConfirmState.checkboxLabel}
+          yesButtonText={deleteConfirmState.yesButtonText}
+          yesButtonClassName={deleteConfirmState.yesButtonClassName}
+          onClose={closeDeleteConfirm}
+          onConfirm={(value) => {
+            deleteConfirmState.onConfirm(value)
           }}
         />
       )}

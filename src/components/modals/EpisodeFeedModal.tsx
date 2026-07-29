@@ -4,12 +4,15 @@ import Btn from '@/components/ui/Btn'
 import Checkbox from '@/components/ui/Checkbox'
 import TextInput from '@/components/ui/TextInput'
 import { useGlobalToast } from '@/contexts/ToastContext'
+import { useShiftClickTextSelectionGuard } from '@/hooks/useShiftClickTextSelectionGuard'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { formatDuration } from '@/lib/formatDuration'
+import { mergeClasses } from '@/lib/merge-classes'
+import { applyShiftClickSelection } from '@/lib/shiftClickSelection'
 import { bytesPretty } from '@/lib/string'
 import { PodcastEpisodeDownload, PodcastLibraryItem, RssPodcastEpisode } from '@/types/api'
 import { useFormatter } from 'next-intl'
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 
 export interface EpisodeFeedModalProps {
   isOpen: boolean
@@ -51,6 +54,11 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
   const [sortDescending, setSortDescending] = useState(true)
   const [selectedEpisodes, setSelectedEpisodes] = useState<Set<string>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
+  const lastSelectedEpisodeUrlRef = useRef<string | null>(null)
+  const { onMouseDown: episodeRowMouseDown, suppressTextSelection } = useShiftClickTextSelectionGuard({
+    enabled: true,
+    selectionActive: selectedEpisodes.size > 0
+  })
 
   const itemEpisodes = useMemo(() => libraryItem.media.episodes || [], [libraryItem.media.episodes])
 
@@ -120,6 +128,25 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
     })
   }, [episodesCleaned, search])
 
+  const episodeListKeys = useMemo(() => episodesList.map((episode) => episode.cleanUrl), [episodesList])
+
+  const selectableEpisodeUrlSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const episode of episodesList) {
+      if (!episode.isDownloaded && !episode.isDownloading) {
+        set.add(episode.cleanUrl)
+      }
+    }
+    return set
+  }, [episodesList])
+
+  // Anchor is only meaningful while the episode is still visible in the filtered list.
+  useEffect(() => {
+    if (lastSelectedEpisodeUrlRef.current && !episodeListKeys.includes(lastSelectedEpisodeUrlRef.current)) {
+      lastSelectedEpisodeUrlRef.current = null
+    }
+  }, [episodeListKeys])
+
   const allDownloaded = useMemo(() => {
     if (episodesCleaned.length === 0) return false
     return !episodesCleaned.some((episode) => !episode.isDownloaded)
@@ -132,6 +159,7 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
       setSortDescending(true)
       setSelectedEpisodes(new Set())
       setSelectAll(false)
+      lastSelectedEpisodeUrlRef.current = null
     }
   }, [isOpen])
 
@@ -154,6 +182,7 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
   const toggleSelectAll = useCallback(
     (checked: boolean) => {
       setSelectAll(checked)
+      lastSelectedEpisodeUrlRef.current = null
       setSelectedEpisodes((prev) => {
         const next = new Set(prev)
         for (const episode of episodesList) {
@@ -171,19 +200,32 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
     [episodesList]
   )
 
-  const toggleSelectEpisode = useCallback((episode: RssPodcastEpisode & { cleanUrl: string; isDownloaded: boolean; isDownloading: boolean }) => {
-    if (episode.isDownloaded || episode.isDownloading) return
+  const selectEpisode = useCallback(
+    (episode: (typeof episodesList)[number], isSelected: boolean, shiftKey = false, rowIndex?: number) => {
+      if (episode.isDownloaded || episode.isDownloading) return
 
-    setSelectedEpisodes((prev) => {
-      const next = new Set(prev)
-      if (next.has(episode.cleanUrl)) {
-        next.delete(episode.cleanUrl)
-      } else {
-        next.add(episode.cleanUrl)
-      }
-      return next
-    })
-  }, [])
+      const index = rowIndex ?? episodesList.findIndex((e) => e.cleanUrl === episode.cleanUrl)
+      if (index < 0) return
+
+      let anchorUpdate: string | null = lastSelectedEpisodeUrlRef.current
+      setSelectedEpisodes((prev) => {
+        const { nextSelected, anchorKey } = applyShiftClickSelection({
+          prevSelected: prev,
+          clickedKey: episode.cleanUrl,
+          clickedIndex: index,
+          shiftKey,
+          anchorKey: lastSelectedEpisodeUrlRef.current,
+          orderedKeys: episodeListKeys,
+          selectClicked: isSelected,
+          isKeySelectable: (key) => selectableEpisodeUrlSet.has(key)
+        })
+        anchorUpdate = anchorKey
+        return nextSelected
+      })
+      lastSelectedEpisodeUrlRef.current = anchorUpdate
+    },
+    [episodesList, episodeListKeys, selectableEpisodeUrlSet]
+  )
 
   const handleSubmit = useCallback(
     (e?: React.FormEvent) => {
@@ -212,6 +254,7 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
           showToast(errorMessage || t('ToastFailedToDownloadEpisodes'), { type: 'error' })
           setSelectedEpisodes(new Set())
           setSelectAll(false)
+          lastSelectedEpisodeUrlRef.current = null
         }
       })
     },
@@ -268,7 +311,7 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
         )}
 
         <div className="w-full grow overflow-x-hidden overflow-y-auto">
-          {episodesList.map((episode) => {
+          {episodesList.map((episode, index) => {
             const isSelected = selectedEpisodes.has(episode.cleanUrl)
             let bgClass = 'even:bg-table-row-bg-even hover:bg-table-row-bg-hover'
             let textClass = 'text-foreground'
@@ -288,8 +331,19 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
             return (
               <div
                 key={episode.guid || episode.cleanUrl}
-                className={`border-border relative flex cursor-pointer items-center border-b last:border-0 ${bgClass}`}
-                onClick={() => toggleSelectEpisode(episode)}
+                className={mergeClasses(
+                  'border-border relative flex cursor-pointer items-center border-b last:border-0',
+                  bgClass,
+                  suppressTextSelection && 'select-none'
+                )}
+                onMouseDown={(e) => {
+                  if (episode.isDownloaded || episode.isDownloading) return
+                  episodeRowMouseDown?.(e)
+                }}
+                onClick={(e) => {
+                  if (episode.isDownloaded || episode.isDownloading) return
+                  selectEpisode(episode, !isSelected, e.shiftKey, index)
+                }}
               >
                 <div className="flex w-12 flex-none items-center justify-center p-3 sm:w-16">
                   {episode.isDownloaded ? (
@@ -297,14 +351,8 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
                   ) : episode.isDownloading ? (
                     <span className="material-symbols text-warning text-xl">download</span>
                   ) : (
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleSelectEpisode(episode)
-                      }}
-                      className="flex items-center justify-center"
-                    >
-                      <Checkbox value={isSelected} size="small" />
+                    <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
+                      <Checkbox value={isSelected} size="small" onChange={(checked, shiftKey) => selectEpisode(episode, checked, shiftKey, index)} />
                     </div>
                   )}
                 </div>

@@ -3,13 +3,25 @@ import { RefObject, useCallback, useEffect, useRef } from 'react'
 export function useClickOutside(
   menuRef: RefObject<HTMLElement | null>,
   triggerRef: RefObject<HTMLElement | null> | null | undefined,
-  handler: (event: MouseEvent) => void
+  handler: (event: MouseEvent) => void,
+  /** Use capture phase so outside clicks are detected before bubble-phase stopPropagation on ancestors */
+  useCapture = false,
+  /** Additional predicate for click targets that count as inside but are not under menuRef or triggerRef */
+  isAdditionalInside?: (target: Node) => boolean
 ): void {
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   const handleMouseDown = useCallback((event: MouseEvent) => {
     mouseDownTargetRef.current = event.target
   }, [])
+
+  const isInsideTarget = useCallback(
+    (target: Node | null | undefined) => {
+      if (!target) return false
+      return menuRef.current?.contains(target) || (triggerRef?.current?.contains(target) ?? false) || (isAdditionalInside?.(target) ?? false)
+    },
+    [menuRef, triggerRef, isAdditionalInside]
+  )
 
   const handleClickOutside = useCallback(
     (event: MouseEvent) => {
@@ -18,34 +30,32 @@ export function useClickOutside(
       const clickTarget = event.target as Node
       const startTarget = mouseDownTargetRef.current as Node
 
-      // 1. Check if the mouseup (click) is inside the modal or trigger
-      const isInside = menuRef.current.contains(clickTarget) || (triggerRef?.current?.contains(clickTarget) ?? false)
-
-      // 2. Check if the mousedown (start) was inside the modal or trigger
-      const startedInside = menuRef.current.contains(startTarget) || (triggerRef?.current?.contains(startTarget) ?? false)
-
       // ONLY trigger handler if both the start and end of the click were truly outside
-      if (!isInside && !startedInside) {
+      if (!isInsideTarget(clickTarget) && !isInsideTarget(startTarget)) {
         handler(event)
       }
 
       mouseDownTargetRef.current = null
     },
-    [menuRef, triggerRef, handler]
+    [menuRef, isInsideTarget, handler]
   )
 
   useEffect(() => {
-    // Track where mousedown occurs to detect drag operations
-    document.addEventListener('mousedown', handleMouseDown)
+    document.addEventListener('mousedown', handleMouseDown, useCapture)
 
     // Use 'click' instead of 'mousedown' to ensure that interactive elements
     // (like buttons) receive their click events before the menu closes.
     // With 'mousedown', the menu close and React re-render would happen between
     // mousedown and mouseup, preventing the clicked element's onClick from firing.
-    document.addEventListener('click', handleClickOutside)
+    document.addEventListener('click', handleClickOutside, useCapture)
     return () => {
-      document.removeEventListener('mousedown', handleMouseDown)
-      document.removeEventListener('click', handleClickOutside)
+      document.removeEventListener('mousedown', handleMouseDown, useCapture)
+      document.removeEventListener('click', handleClickOutside, useCapture)
     }
-  }, [handleClickOutside, handleMouseDown])
+  }, [handleClickOutside, handleMouseDown, useCapture])
+}
+
+/** Build an isAdditionalInside check for elements tagged with a shared data attribute (e.g. portaled dropdown submenus). */
+export function createAdditionalInsideCheck(attribute: string, value: string): (target: Node) => boolean {
+  return (target: Node) => target instanceof Element && !!target.closest(`[${attribute}="${value}"]`)
 }

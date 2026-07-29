@@ -83,7 +83,7 @@ function InputDropdown({
     closeMenu()
   }, [closeMenu])
 
-  useClickOutside(menuRef, wrapperRef, handleClickOutside)
+  useClickOutside(menuRef, wrapperRef, handleClickOutside, true)
 
   const itemsToShow = useMemo(() => {
     if (!textInput) return items
@@ -210,7 +210,10 @@ function InputDropdown({
 
         case 'Escape':
           e.preventDefault()
-          handleEscape()
+          if (showMenu) {
+            e.stopPropagation()
+            handleEscape()
+          }
           break
 
         case 'Home':
@@ -228,7 +231,7 @@ function InputDropdown({
           break
       }
     },
-    [disabled, handleVerticalNavigation, handleEnter, handleEscape, handleHomeEnd, handleTab]
+    [disabled, showMenu, handleVerticalNavigation, handleEnter, handleEscape, handleHomeEnd, handleTab]
   )
 
   const isMenuItemSelected = useCallback(

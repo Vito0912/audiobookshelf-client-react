@@ -4,8 +4,9 @@ import Btn from '@/components/ui/Btn'
 import IconBtn from '@/components/ui/IconBtn'
 import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { mergeClasses } from '@/lib/merge-classes'
 import Link from 'next/link'
-import SettingsMoreInfoIcon from './SettingsMoreInfoIcon'
+import MoreInfoIcon from '@/components/ui/MoreInfoIcon'
 
 interface AddButtonProps {
   label: string
@@ -15,20 +16,24 @@ interface AddButtonProps {
 export default function SettingsContent(props: {
   children: React.ReactNode
   title: string
-  description?: string
+  description?: React.ReactNode
   moreInfoUrl?: string
   backLink?: string
   addButton?: AddButtonProps
   entityCount?: number
+  className?: string
+  hideMobileMenu?: boolean
 }) {
   const t = useTypeSafeTranslations()
   const { toggle } = useSettingsDrawer()
 
   return (
-    <div className="mx-auto w-full max-w-4xl p-2 md:p-6">
-      <IconBtn className="mb-2 md:hidden" ariaLabel={t('ButtonMenu')} size="large" borderless onClick={toggle}>
-        menu
-      </IconBtn>
+    <div className={mergeClasses('mx-auto w-full max-w-4xl p-2 md:p-6', props.className ?? '')}>
+      {!props.hideMobileMenu && (
+        <IconBtn className="mb-2 md:hidden" ariaLabel={t('ButtonMenu')} size="large" borderless onClick={toggle}>
+          menu
+        </IconBtn>
+      )}
       <div className="bg-bg border-border mb-8 rounded-md border p-2 shadow-lg sm:p-4">
         <div className="mb-2 flex items-center gap-2">
           {props.backLink && (
@@ -40,7 +45,7 @@ export default function SettingsContent(props: {
           {props.entityCount && (
             <div className="bg-primary/50 text-foreground-muted inline-flex items-center justify-center rounded-lg px-1.5 text-sm">{props.entityCount}</div>
           )}
-          {props.moreInfoUrl && <SettingsMoreInfoIcon moreInfoUrl={props.moreInfoUrl} />}
+          {props.moreInfoUrl && <MoreInfoIcon moreInfoUrl={props.moreInfoUrl} />}
           <div className="grow" />
           {props.addButton && (
             <Btn size="small" onClick={props.addButton.onClick}>
@@ -48,7 +53,7 @@ export default function SettingsContent(props: {
             </Btn>
           )}
         </div>
-        {props.description && <p className="text-foreground-muted mb-6 text-sm">{props.description}</p>}
+        {props.description ? <div className="text-foreground-muted default-style mb-6 text-sm">{props.description}</div> : null}
         {props.children}
       </div>
     </div>

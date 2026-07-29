@@ -1,3 +1,5 @@
+import { ChromecastProvider } from '@/contexts/ChromecastContext'
+import { EreaderProvider } from '@/contexts/EreaderContext'
 import { MediaProvider } from '@/contexts/MediaContext'
 import { MetadataProvider } from '@/contexts/MetadataContext'
 import { SocketProvider } from '@/contexts/SocketContext'
@@ -18,11 +20,15 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   return (
     <SocketProvider accessToken={accesstoken}>
       <UserProvider initialUser={currentUser}>
-        <TasksProvider>
-          <MetadataProvider>
-            <MediaProvider>{children}</MediaProvider>
-          </MetadataProvider>
-        </TasksProvider>
+        <ChromecastProvider>
+          <TasksProvider>
+            <MetadataProvider>
+              <MediaProvider>
+                <EreaderProvider>{children}</EreaderProvider>
+              </MediaProvider>
+            </MetadataProvider>
+          </TasksProvider>
+        </ChromecastProvider>
       </UserProvider>
     </SocketProvider>
   )

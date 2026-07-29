@@ -1,13 +1,16 @@
 'use client'
 
-import type { UsePlayerHandlerReturn } from '@/hooks/usePlayerHandler'
+import TruncatingTooltipText from '@/components/ui/TruncatingTooltipText'
+import type { PlayerHandler } from '@/hooks/usePlayerHandler'
+import { usePlayerProgress } from '@/lib/player/playerProgressStore'
 import { secondsToTimestamp } from '@/lib/datefns'
 import { mergeClasses } from '@/lib/merge-classes'
 import { PlayerState } from '@/types/api'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface PlayerTrackBarProps {
-  playerHandler: UsePlayerHandlerReturn
+  playerHandler: PlayerHandler
+  variant?: 'full' | 'mobile-collapsed'
 }
 
 interface ChapterTick {
@@ -15,10 +18,13 @@ interface ChapterTick {
   left: number
 }
 
-export default function PlayerTrackBar({ playerHandler }: PlayerTrackBarProps) {
-  const { currentTime, duration, bufferedTime, settings, chapters, playerState, currentChapter } = playerHandler.state
+export default function PlayerTrackBar({ playerHandler, variant = 'full' }: PlayerTrackBarProps) {
+  const { duration, settings, chapters, playerState, transcodePercentReady, isHlsTranscode } = playerHandler.state
   const { seek } = playerHandler.controls
   const { playbackRate, useChapterTrack } = settings
+  const { currentTime, bufferedTime } = usePlayerProgress()
+
+  const currentChapter = useMemo(() => chapters.find((chapter) => chapter.start <= currentTime && chapter.end > currentTime) ?? null, [chapters, currentTime])
 
   const isLoading = playerState === PlayerState.LOADING
 
@@ -58,6 +64,7 @@ export default function PlayerTrackBar({ playerHandler }: PlayerTrackBarProps) {
 
   const bufferedTimeAdjusted = useChapterTrack ? Math.max(0, bufferedTime - currentChapterStart) : bufferedTime
   const bufferedPercent = effectiveDuration ? Math.min(100, (bufferedTimeAdjusted / effectiveDuration) * 100) : 0
+  const transcodeReadyPercent = isHlsTranscode ? Math.min(100, transcodePercentReady * 100) : 0
 
   // Chapter ticks for display (only visible when not in chapter mode)
   const chapterTicks = useMemo<ChapterTick[]>(() => {
@@ -176,6 +183,8 @@ export default function PlayerTrackBar({ playerHandler }: PlayerTrackBarProps) {
     setIsHovering(false)
   }, [])
 
+  const isMobileCollapsed = variant === 'mobile-collapsed'
+
   return (
     <div>
       <div className="relative">
@@ -187,6 +196,13 @@ export default function PlayerTrackBar({ playerHandler }: PlayerTrackBarProps) {
           onMouseLeave={handleMouseLeave}
           onClick={handleTrackClick}
         >
+          {/* HLS transcode ready track (server-side segment progress) */}
+          {isHlsTranscode && (
+            <div
+              className="bg-track-progress/30 pointer-events-none absolute top-0 left-0 h-full transition-[width] duration-75"
+              style={{ width: `${transcodeReadyPercent}%` }}
+            />
+          )}
           {/* Buffer track */}
           <div
             className="bg-track-progress/50 pointer-events-none absolute top-0 left-0 h-full transition-[width] duration-75"
@@ -244,21 +260,36 @@ export default function PlayerTrackBar({ playerHandler }: PlayerTrackBarProps) {
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <p className="text-foreground-muted font-mono text-sm">
-          {currentTimeFormatted} / {Math.round(playedPercent)}%
+      <div className={mergeClasses('flex items-center justify-between gap-3', isMobileCollapsed ? 'mt-0.5' : '')}>
+        <p className={mergeClasses('text-foreground-muted shrink-0 font-mono', isMobileCollapsed ? 'text-xs' : 'text-sm')}>
+          {currentTimeFormatted}
+          {' / '}
+          {Math.round(playedPercent)}%
         </p>
-        {currentChapter && (
-          <p className="text-foreground-muted text-sm">
-            {currentChapter.title}{' '}
-            {useChapterTrack && (
-              <span className="text-foreground-subdued pl-1 text-xs">
-                ({currentChapterNumber} of {chapters.length})
-              </span>
-            )}
-          </p>
+        {currentChapter ? (
+          isMobileCollapsed ? (
+            <div className="text-foreground-muted flex min-w-0 flex-1 items-center justify-center sm:max-w-none">
+              <TruncatingTooltipText lazy text={currentChapter.title} className="min-w-0 text-xs" position="top" />
+              {useChapterTrack && currentChapterNumber !== null && (
+                <span className="text-foreground-subdued shrink-0 pl-1 text-xs">
+                  ({currentChapterNumber} of {chapters.length})
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-foreground-muted max-w-[40%] truncate text-sm sm:max-w-none">
+              {currentChapter.title}{' '}
+              {useChapterTrack && (
+                <span className="text-foreground-subdued pl-1 text-xs">
+                  ({currentChapterNumber} of {chapters.length})
+                </span>
+              )}
+            </p>
+          )
+        ) : (
+          <span className="flex-1" />
         )}
-        <p className="text-foreground-muted font-mono text-sm">{timeRemainingFormatted}</p>
+        <p className={mergeClasses('text-foreground-muted shrink-0 font-mono', isMobileCollapsed ? 'text-xs' : 'text-sm')}>{timeRemainingFormatted}</p>
       </div>
     </div>
   )

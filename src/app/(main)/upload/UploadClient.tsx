@@ -1,6 +1,6 @@
 'use client'
 
-import { useMediaContext } from '@/contexts/MediaContext'
+import { useMediaNavigation } from '@/contexts/MediaContext'
 import { useBookProviders, useMetadata } from '@/contexts/MetadataContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
@@ -9,6 +9,7 @@ import { startTransition, useEffect, useMemo, useState } from 'react'
 import Btn from '@/components/ui/Btn'
 import CollapsibleTable from '@/components/ui/CollapsibleTable'
 import Dropdown from '@/components/ui/Dropdown'
+import HelpTooltipIcon from '@/components/ui/HelpTooltipIcon'
 import IconBtn from '@/components/ui/IconBtn'
 import LoadingIndicator from '@/components/ui/LoadingIndicator'
 import ProgressIndicator from '@/components/ui/ProgressIndicator'
@@ -20,11 +21,13 @@ import Alert from '@/components/widgets/Alert'
 import DragDrop from '@/components/widgets/DragDrop'
 import FilePicker from '@/components/widgets/FilePicker'
 import { sanitizeFileName, SupportedFileTypes } from '@/lib/fileUtils'
+import { uploadLibraryItem } from '@/lib/libraryItemUpload'
 import { bytesPretty } from '@/lib/string'
 import { Library } from '@/types/api'
+import type { UploadProgressInfo } from '@/types/upload'
 import path from 'path'
-import { CleanedItem, FileWithMetadata, getItemsFromFilelist, upload, UploadProgressInfo } from './UploadHelper'
-import { fetchBookMetadata, fetchPodcastMetadata, getCookie } from './actions'
+import { CleanedItem, FileWithMetadata, getItemsFromFilelist } from './UploadHelper'
+import { fetchBookMetadata, fetchPodcastMetadata } from './actions'
 
 export interface ItemToUpload extends CleanedItem {
   metadataError?: string
@@ -75,7 +78,7 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
     }))
   const currentLibraryMediaType = libraries.find((lib) => lib.id === selectedLibrary)?.mediaType
 
-  const { lastCurrentLibraryId } = useMediaContext()
+  const { lastCurrentLibraryId } = useMediaNavigation()
   const { userDefaultLibraryId } = useUser()
 
   useEffect(() => {
@@ -247,7 +250,6 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
   const handleStartUpload = async () => {
     setUploadProcessing(true)
     setUploadFinished(false)
-    const cookie = await getCookie()
     for (const item of uploadItems) {
       item.isUploading = true
       item.uploadProgress = 0
@@ -255,7 +257,7 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
       item.uploadBytesTotal = item.itemFiles.reduce((sum, file) => sum + file.size, 0)
 
       try {
-        await upload(item, selectedLibrary!, selectedFolder!, currentLibraryMediaType!, cookie, (progress: UploadProgressInfo) => {
+        await uploadLibraryItem(item, selectedLibrary!, selectedFolder!, currentLibraryMediaType!, (progress: UploadProgressInfo) => {
           item.uploadProgress = progress.percent
           item.uploadBytesLoaded = progress.loaded
           item.uploadBytesTotal = progress.total
@@ -320,9 +322,7 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center pt-6">
             <ToggleSwitch label={t('LabelAutoFetchMetadata')} value={autoFetch} className="pr-0" onChange={setAutoFetch} />
-            <Tooltip maxWidth={300} text={t('LabelAutoFetchMetadataHelp')}>
-              <span className="material-symbols text-lg">info</span>
-            </Tooltip>
+            <HelpTooltipIcon text={t('LabelAutoFetchMetadataHelp')} />
           </div>
 
           <div className="min-w-[200px] flex-1">

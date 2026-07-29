@@ -1,6 +1,7 @@
 import { closePlaybackSession, startPlaybackSession, syncPlaybackSession } from '@/app/actions/playbackActions'
 import { useGlobalToast } from '@/contexts/ToastContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { ApiError } from '@/lib/apiErrors'
 import { generateUUID } from '@/lib/cryptoUtils'
 import { AudioTrack } from '@/lib/player/AudioTrack'
 import { FIRST_SYNC_DELAY, SUBSEQUENT_SYNC_INTERVAL } from '@/lib/player/constants'
@@ -29,11 +30,23 @@ interface UsePlaybackSessionOptions {
   getCurrentTime?: () => number
 }
 
+export interface StartSessionOptions {
+  mediaPlayer?: StartSessionPayload['mediaPlayer']
+  forceDirectPlay?: boolean
+  forceTranscode?: boolean
+}
+
 interface UsePlaybackSessionReturn {
   /** Start a new playback session */
-  startSession: (libraryItem: LibraryItem, supportedMimeTypes: string[], episodeId?: string, startTimeOverride?: number) => Promise<PlaybackSession | null>
+  startSession: (
+    libraryItem: LibraryItem,
+    supportedMimeTypes: string[],
+    episodeId?: string,
+    startTimeOverride?: number,
+    options?: StartSessionOptions
+  ) => Promise<PlaybackSession | null>
   /** Sync progress to server */
-  syncProgress: (currentTime: number) => void
+  syncProgress: (currentTime: number, options?: { force?: boolean }) => Promise<void>
   /** Close the current session */
   closeSession: (getCurrentTime?: () => number) => Promise<void>
   /** Start the sync interval (call when playback starts) */
@@ -77,7 +90,13 @@ export function usePlaybackSession(options: UsePlaybackSessionOptions = {}): Use
    * Start a new playback session
    */
   const startSession = useCallback(
-    async (libraryItem: LibraryItem, supportedMimeTypes: string[], episodeId?: string, startTimeOverride?: number): Promise<PlaybackSession | null> => {
+    async (
+      libraryItem: LibraryItem,
+      supportedMimeTypes: string[],
+      episodeId?: string,
+      startTimeOverride?: number,
+      options: StartSessionOptions = {}
+    ): Promise<PlaybackSession | null> => {
       try {
         const payload: StartSessionPayload = {
           deviceInfo: {
@@ -85,9 +104,9 @@ export function usePlaybackSession(options: UsePlaybackSessionOptions = {}): Use
             deviceId: getDeviceId()
           },
           supportedMimeTypes,
-          mediaPlayer: 'html5',
-          forceTranscode: false,
-          forceDirectPlay: false
+          mediaPlayer: options.mediaPlayer ?? 'html5',
+          forceTranscode: options.forceTranscode ?? false,
+          forceDirectPlay: options.forceDirectPlay ?? false
         }
 
         const session = await startPlaybackSession(libraryItem.id, payload, episodeId)
@@ -135,13 +154,13 @@ export function usePlaybackSession(options: UsePlaybackSessionOptions = {}): Use
    * Sync progress to server (debounced by minimum diff)
    */
   const syncProgress = useCallback(
-    async (currentTime: number) => {
+    async (currentTime: number, options?: { force?: boolean }) => {
       const session = sessionRef.current
       if (!session) return
 
-      // Skip if time hasn't changed enough
+      // Skip if time hasn't changed enough (always sync when playback finishes)
       const diffSinceLastSync = Math.abs(lastSyncTimeRef.current - currentTime)
-      if (diffSinceLastSync < 1) return
+      if (!options?.force && diffSinceLastSync < 1) return
 
       lastSyncTimeRef.current = currentTime
       const timeListened = Math.max(0, Math.floor(listeningTimeSinceSync.current))
@@ -242,6 +261,8 @@ export function usePlaybackSession(options: UsePlaybackSessionOptions = {}): Use
 
         await closePlaybackSession(session.id, syncData)
       } catch (error) {
+        // Session may already be closed when switching queue items quickly
+        if (error instanceof ApiError && error.status === 404) return
         console.error('[usePlaybackSession] Failed to close session:', error)
       } finally {
         sessionRef.current = null

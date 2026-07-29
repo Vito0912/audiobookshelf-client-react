@@ -1,5 +1,6 @@
 'use client'
 
+import { useShiftClickTextSelectionGuard } from '@/hooks/useShiftClickTextSelectionGuard'
 import { mergeClasses } from '@/lib/merge-classes'
 import React, { useId, useRef } from 'react'
 import InputWrapper from './InputWrapper'
@@ -15,7 +16,7 @@ interface CheckboxProps {
   disabled?: boolean
   partial?: boolean
   ariaLabel?: string
-  onChange?: (value: boolean) => void
+  onChange?: (value: boolean, shiftKey: boolean) => void
   className?: string
 }
 
@@ -24,7 +25,7 @@ export default function Checkbox({
   label,
   size = 'medium',
   checkboxBgClass = 'bg-bg',
-  borderColorClass = 'border-gray-400',
+  borderColorClass = 'border-foreground-subdued',
   checkColorClass = 'text-green-500',
   labelClass = '',
   disabled = false,
@@ -34,6 +35,8 @@ export default function Checkbox({
   className = ''
 }: CheckboxProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const shiftKeyRef = useRef(false)
+  const { onPointerDown: guardPointerDown } = useShiftClickTextSelectionGuard({ enabled: true })
 
   const checkboxId = useId()
 
@@ -51,13 +54,20 @@ export default function Checkbox({
   const svgSizeClass = size === 'small' ? 'w-3 h-3' : size === 'medium' ? 'w-3.5 h-3.5' : 'w-4 h-4'
   const svgClass = mergeClasses('pointer-events-none', disabled ? 'fill-checkbox-disabled' : 'fill-current', checkColorClass, svgSizeClass)
 
+  const handlePointerDown = (e: React.PointerEvent) => {
+    shiftKeyRef.current = e.shiftKey
+    guardPointerDown?.(e)
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!disabled) {
-      onChange?.(e.target.checked)
+      onChange?.(e.target.checked, shiftKeyRef.current)
+      shiftKeyRef.current = false
     }
   }
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    shiftKeyRef.current = e.shiftKey
     if (e.key === 'Enter') {
       e.preventDefault()
       if (!disabled) {
@@ -68,7 +78,7 @@ export default function Checkbox({
 
   return (
     <InputWrapper disabled={disabled} borderless size={size} className={mergeClasses('bg-transparent', className)} inputRef={inputRef}>
-      <div cy-id="checkbox-and-label-wrapper" className="flex items-center justify-start px-1 py-1">
+      <div cy-id="checkbox-and-label-wrapper" className="flex items-center justify-start px-1 py-1" onPointerDown={handlePointerDown}>
         <div cy-id="checkbox-wrapper" className={checkboxWrapperClassName}>
           <div
             cy-id="checkbox-div"
@@ -84,9 +94,9 @@ export default function Checkbox({
           </div>
         </div>
         {label && (
-          <span cy-id="checkbox-label" className={checkboxLabelClassName}>
+          <label htmlFor={checkboxId} cy-id="checkbox-label" className={checkboxLabelClassName}>
             {label}
-          </span>
+          </label>
         )}
         {/* Input is last in DOM so it sits on top of the visual elements in stacking order.
             Clicks land directly on the native input, so the browser's :focus-visible

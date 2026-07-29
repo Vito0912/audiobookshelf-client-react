@@ -1,7 +1,12 @@
 'use server'
 
 import * as api from '@/lib/api'
-import { RssPodcastEpisode, UpdateLibraryItemMediaPayload } from '@/types/api'
+import { RssPodcastEpisode, UpdateLibraryItemMediaPayload, UpdatePodcastEpisodePayload, type BatchUpdateLibraryItemPayload } from '@/types/api'
+import { revalidatePath } from 'next/cache'
+
+function revalidateSeriesPage(libraryId: string, seriesId: string) {
+  revalidatePath(`/library/${libraryId}/series/${seriesId}`)
+}
 
 export async function toggleFinishedAction(libraryItemId: string, params: { isFinished: boolean; episodeId?: string }) {
   return api.updateMediaFinished(libraryItemId, params)
@@ -11,8 +16,21 @@ export async function batchUpdateMediaFinishedAction(payload: { libraryItemId: s
   return api.batchUpdateMediaFinished(payload)
 }
 
+export async function markSeriesFinishedAction(libraryId: string, seriesId: string, payload: { libraryItemId: string; isFinished: boolean }[]) {
+  await api.batchUpdateMediaFinished(payload)
+  revalidateSeriesPage(libraryId, seriesId)
+}
+
 export async function updateLibraryItemMediaAction(libraryItemId: string, payload: UpdateLibraryItemMediaPayload) {
   return api.updateLibraryItemMedia(libraryItemId, payload)
+}
+
+export async function batchGetLibraryItemsAction(libraryItemIds: string[]) {
+  return api.batchGetLibraryItems(libraryItemIds)
+}
+
+export async function batchUpdateLibraryItemsAction(payload: BatchUpdateLibraryItemPayload[]) {
+  return api.batchUpdateLibraryItems(payload)
 }
 
 export async function rescanLibraryItemAction(libraryItemId: string) {
@@ -25,6 +43,10 @@ export async function sendEbookToDeviceAction(payload: { libraryItemId: string; 
 
 export async function removeSeriesFromContinueListeningAction(seriesId: string) {
   return api.removeSeriesFromContinueListening(seriesId)
+}
+
+export async function readdSeriesToContinueListeningAction(seriesId: string) {
+  return api.readdSeriesToContinueListening(seriesId)
 }
 
 export async function removeFromContinueListeningAction(progressId: string) {
@@ -53,4 +75,16 @@ export async function downloadPodcastEpisodesAction(libraryItemId: string, episo
 
 export async function clearPodcastDownloadQueueAction(libraryItemId: string) {
   return api.clearPodcastDownloadQueue(libraryItemId)
+}
+
+export async function getPodcastEpisodeAction(libraryItemId: string, episodeId: string) {
+  return api.getPodcastEpisode(libraryItemId, episodeId)
+}
+
+export async function updatePodcastEpisodeAction(libraryItemId: string, episodeId: string, payload: UpdatePodcastEpisodePayload) {
+  return api.updatePodcastEpisode(libraryItemId, episodeId, payload)
+}
+
+export async function searchPodcastEpisodeAction(libraryItemId: string, title: string) {
+  return api.searchPodcastEpisode(libraryItemId, title)
 }

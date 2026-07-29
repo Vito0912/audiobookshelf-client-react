@@ -1,6 +1,5 @@
 @import './fonts.css';
 @import './transitions.css';
-@import './draggable.css';
 @import './defaultStyles.css';
 @import './absicons.css';
 
@@ -15,13 +14,7 @@
 }
 /* Subtract height of app bar and media player */
 .page-wrapper.streaming {
-  height: calc(100dvh - 4rem - 165px);
-}
-@media (max-width: 1024px) {
-  /* subtract height of app bar and mobile media player */
-  .page-wrapper.streaming {
-    height: calc(100dvh - 4rem - 192px);
-  }
+  height: calc(100dvh - 4rem - var(--media-player-height, 165px));
 }
 
 #bookshelf {
@@ -49,6 +42,51 @@
 
 .page-bg-gradient {
   background-image: var(--tc-page-gradient);
+}
+
+.library-item-cover-accent-backdrop {
+  opacity: 0;
+  animation: library-item-cover-accent-fade-in 0.55s ease-out forwards;
+  background: var(--tc-library-item-accent-background);
+  -webkit-mask-image: var(--tc-library-item-accent-mask-image);
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-image: var(--tc-library-item-accent-mask-image);
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+}
+
+@keyframes library-item-cover-accent-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-item-cover-accent-backdrop {
+    animation-duration: 0.01ms;
+  }
+}
+
+.player-cover-accent-backdrop {
+  opacity: 0;
+  animation: library-item-cover-accent-fade-in 0.55s ease-out forwards;
+  /*
+   * --tc-player-accent-rgb is set on the media player container
+   */
+  background: radial-gradient(
+    ellipse 128% 92% at -4% -3%,
+    rgb(var(--tc-player-accent-rgb) / 0.13) 0%,
+    rgb(var(--tc-player-accent-rgb) / 0.075) 40%,
+    rgb(var(--tc-player-accent-rgb) / 0.01) 76%,
+    rgb(var(--tc-player-accent-rgb) / 0) 90%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-cover-accent-backdrop {
+    animation-duration: 0.01ms;
+  }
 }
 
 /* width */
@@ -99,33 +137,6 @@
 input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
-}
-
-.tracksTable {
-  border-collapse: collapse;
-  width: 100%;
-  border: 1px solid #474747;
-}
-
-.tracksTable tr:nth-child(even) {
-  background-color: #2e2e2e;
-}
-
-.tracksTable tr {
-  background-color: #373838;
-}
-
-.tracksTable tr:hover:not(:has(th)) {
-  background-color: #474747;
-}
-
-.tracksTable td {
-  padding: 4px 8px;
-}
-
-.tracksTable th {
-  padding: 4px 8px;
-  font-size: 0.75rem;
 }
 
 .arrow-down {

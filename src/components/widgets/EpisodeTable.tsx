@@ -1,23 +1,28 @@
 'use client'
 
-import { batchUpdateMediaFinishedAction, deleteLibraryItemMediaEpisodeAction, fetchPodcastFeedAction, toggleFinishedAction } from '@/app/actions/mediaActions'
+import { batchUpdateMediaFinishedAction, deleteLibraryItemMediaEpisodeAction, fetchPodcastFeedAction } from '@/app/actions/mediaActions'
 import AudioFileDataModal from '@/components/modals/AudioFileDataModal'
+import EpisodeEditModal from '@/components/modals/EpisodeEditModal'
 import EpisodeFeedModal from '@/components/modals/EpisodeFeedModal'
+import EpisodeMatchModal from '@/components/modals/EpisodeMatchModal'
 import ViewEpisodeModal from '@/components/modals/ViewEpisodeModal'
+import ConfirmDialog, { type ConfirmState } from '@/components/widgets/ConfirmDialog'
 import EpisodeRow, { EPISODE_ROW_HEIGHT_PX } from '@/components/widgets/EpisodeRow'
 import EpisodeTableHeaderActions from '@/components/widgets/EpisodeTableHeaderActions'
 import EpisodeTableToolbar from '@/components/widgets/EpisodeTableToolbar'
 import LoadingSpinner from '@/components/widgets/LoadingSpinner'
-import { useMediaContext } from '@/contexts/MediaContext'
 import { useGlobalToast } from '@/contexts/ToastContext'
 import { useUser } from '@/contexts/UserContext'
 import { useEpisodeFilterAndSort } from '@/hooks/useEpisodeFilterAndSort'
 import { useEpisodeTableVirtualizer } from '@/hooks/useEpisodeTableVirtualizer'
 import { useLibraryFileActions } from '@/hooks/useLibraryFileActions'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { getPodcastEpisodeNavigationContext } from '@/lib/episodeEditNavigation'
 import { buildPodcastEpisodeProgressMap } from '@/lib/mediaProgress'
+import { mergeClasses } from '@/lib/merge-classes'
+import { applyShiftClickSelection } from '@/lib/shiftClickSelection'
 import { PodcastEpisode, PodcastEpisodeDownload, PodcastLibraryItem, RssPodcastEpisode } from '@/types/api'
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 
 interface EpisodeTableProps {
   libraryItem: PodcastLibraryItem
@@ -25,19 +30,27 @@ interface EpisodeTableProps {
   dateFormat?: string
   episodesDownloading?: PodcastEpisodeDownload[]
   episodeDownloadsQueued?: PodcastEpisodeDownload[]
+  /** Current filtered/sorted episode list (for item-page Play parity with Vue). */
+  onEpisodesInOrderChange?: (episodes: PodcastEpisode[]) => void
 }
 
 /**
  * Table for podcast episodes with advanced filtering, sorting, and management controls.
  */
-export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', episodesDownloading = [], episodeDownloadsQueued = [] }: EpisodeTableProps) {
+export default function EpisodeTable({
+  libraryItem,
+  dateFormat = 'MM/dd/yyyy',
+  episodesDownloading = [],
+  episodeDownloadsQueued = [],
+  onEpisodesInOrderChange
+}: EpisodeTableProps) {
   const t = useTypeSafeTranslations()
-  const { playItem, isStreaming, isPlaying, playerHandler } = useMediaContext()
   const { showToast } = useGlobalToast()
   const { user, userIsAdminOrUp } = useUser()
   const [, startTransition] = useTransition()
 
   const [isEpisodeFeedModalOpen, setIsEpisodeFeedModalOpen] = useState(false)
+  const [batchMarkConfirmState, setBatchMarkConfirmState] = useState<ConfirmState | null>(null)
   const [podcastFeedEpisodes, setPodcastFeedEpisodes] = useState<RssPodcastEpisode[]>([])
   const [fetchingRSSFeed, startFetchingRSSTransition] = useTransition()
 
@@ -52,7 +65,10 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
   )
 
   const [selectedEpisodes, setSelectedEpisodes] = useState<Set<string>>(new Set())
+  const lastSelectedEpisodeIdRef = useRef<string | null>(null)
   const [viewedEpisode, setViewedEpisode] = useState<PodcastEpisode | null>(null)
+  const [editedEpisode, setEditedEpisode] = useState<PodcastEpisode | null>(null)
+  const [matchedEpisode, setMatchedEpisode] = useState<PodcastEpisode | null>(null)
 
   const { downloadFile, showMoreInfo, audioFileToShow, closeMoreInfo } = useLibraryFileActions(libraryItem.id)
 
@@ -60,6 +76,19 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
 
   const { filterKey, setFilterKey, sortKey, setSortKey, sortDesc, setSortDesc, search, setSearch, isSearching, filteredEpisodes, hasMounted } =
     useEpisodeFilterAndSort({ libraryItemId: libraryItem.id, episodes, getMediaItemProgress })
+
+  const filteredEpisodeIds = useMemo(() => filteredEpisodes.map((episode) => episode.id), [filteredEpisodes])
+
+  useEffect(() => {
+    onEpisodesInOrderChange?.(filteredEpisodes)
+  }, [filteredEpisodes, onEpisodesInOrderChange])
+
+  // Anchor is only meaningful while the episode is still visible in the filtered list.
+  useEffect(() => {
+    if (lastSelectedEpisodeIdRef.current && !filteredEpisodeIds.includes(lastSelectedEpisodeIdRef.current)) {
+      lastSelectedEpisodeIdRef.current = null
+    }
+  }, [filteredEpisodeIds])
 
   const handleCloseViewModal = useCallback(() => {
     if (viewedEpisode) {
@@ -71,8 +100,6 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
     }
     setViewedEpisode(null)
   }, [viewedEpisode])
-
-  const isViewEpisodeModalOpen = viewedEpisode !== null
 
   // Virtualizer — lazy render only visible rows
   const { visibleStart, visibleEnd, totalHeight, listContainerRef } = useEpisodeTableVirtualizer(filteredEpisodes.length, EPISODE_ROW_HEIGHT_PX)
@@ -87,67 +114,69 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
     })
   }, [filteredEpisodes, getMediaItemProgress])
 
-  const handleSelectEpisode = useCallback((episode: PodcastEpisode, isSelected: boolean) => {
-    setSelectedEpisodes((prev) => {
-      const next = new Set(prev)
-      if (isSelected) {
-        next.add(episode.id)
-      } else {
-        next.delete(episode.id)
-      }
-      return next
-    })
-  }, [])
+  const handleSelectEpisode = useCallback(
+    (episode: PodcastEpisode, isSelected: boolean, shiftKey = false, rowIndex?: number) => {
+      const index = rowIndex ?? filteredEpisodes.findIndex((e) => e.id === episode.id)
+      if (index < 0) return
+
+      let anchorUpdate: string | null = lastSelectedEpisodeIdRef.current
+      setSelectedEpisodes((prev) => {
+        const { nextSelected, anchorKey } = applyShiftClickSelection({
+          prevSelected: prev,
+          clickedKey: episode.id,
+          clickedIndex: index,
+          shiftKey,
+          anchorKey: lastSelectedEpisodeIdRef.current,
+          orderedKeys: filteredEpisodeIds,
+          selectClicked: isSelected
+        })
+        anchorUpdate = anchorKey
+        return nextSelected
+      })
+      lastSelectedEpisodeIdRef.current = anchorUpdate
+    },
+    [filteredEpisodes, filteredEpisodeIds]
+  )
 
   const handleClearSelection = useCallback(() => {
     setSelectedEpisodes(new Set())
+    lastSelectedEpisodeIdRef.current = null
   }, [])
-
-  const handlePlayEpisode = useCallback(
-    (episode: PodcastEpisode) => {
-      // If the episode is currently streaming, toggle play/pause
-      if (isStreaming(libraryItem.id, episode.id)) {
-        playerHandler.controls.playPause()
-        return
-      }
-
-      playItem({
-        libraryItem,
-        episodeId: episode.id,
-        queueItems: []
-      })
-    },
-    [libraryItem, playItem, isStreaming, playerHandler.controls]
-  )
-
-  const handleToggleFinished = useCallback(
-    (episode: PodcastEpisode) => {
-      const progress = getMediaItemProgress(episode.id)
-      const isFinished = progress ? !progress.isFinished : true
-
-      startTransition(async () => {
-        try {
-          await toggleFinishedAction(libraryItem.id, {
-            isFinished,
-            episodeId: episode.id
-          })
-        } catch (error) {
-          console.error('Failed to update media finished state', error)
-          showToast(t('ToastFailedToUpdate'), { type: 'error' })
-        }
-      })
-    },
-    [libraryItem.id, getMediaItemProgress, showToast, t]
-  )
 
   const handleViewEpisode = useCallback((episode: PodcastEpisode) => {
     setViewedEpisode(episode)
   }, [])
 
   const handleEditEpisode = useCallback((episode: PodcastEpisode) => {
-    // TODO: Open episode edit modal
-    console.log('Edit episode:', episode.id)
+    setEditedEpisode(episode)
   }, [])
+
+  const handleCloseEditModal = useCallback(() => {
+    setEditedEpisode(null)
+  }, [])
+
+  const handleMatchEpisode = useCallback((episode: PodcastEpisode) => {
+    setMatchedEpisode(episode)
+  }, [])
+
+  const handleCloseMatchModal = useCallback(() => {
+    setMatchedEpisode(null)
+  }, [])
+
+  const editedEpisodeNavCtx = useMemo(
+    () => (editedEpisode ? getPodcastEpisodeNavigationContext(libraryItem.id, filteredEpisodes, editedEpisode.id) : null),
+    [editedEpisode, filteredEpisodes, libraryItem.id]
+  )
+
+  const matchedEpisodeNavCtx = useMemo(
+    () => (matchedEpisode ? getPodcastEpisodeNavigationContext(libraryItem.id, filteredEpisodes, matchedEpisode.id) : null),
+    [matchedEpisode, filteredEpisodes, libraryItem.id]
+  )
+
+  const viewedEpisodeNavCtx = useMemo(
+    () => (viewedEpisode ? getPodcastEpisodeNavigationContext(libraryItem.id, filteredEpisodes, viewedEpisode.id) : null),
+    [viewedEpisode, filteredEpisodes, libraryItem.id]
+  )
 
   const handleFindEpisodes = useCallback(() => {
     const feedUrl = libraryItem.media.metadata.feedUrl
@@ -204,11 +233,6 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
     [libraryItem.id, t, showToast]
   )
 
-  const handleAddToPlaylist = useCallback(() => {
-    // NOTE: Not natively implemented yet
-    showToast('This action is not implemented yet.', { type: 'info' })
-  }, [showToast])
-
   const contextMenuItems = useMemo(() => {
     const items = []
     if (userIsAdminOrUp) {
@@ -228,23 +252,31 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
       } else if (action === 'batch-mark-as-finished') {
         const markState = !allEpisodesFinished
 
-        startTransition(async () => {
-          try {
-            await batchUpdateMediaFinishedAction(
-              filteredEpisodes.map((episode) => ({
-                libraryItemId: libraryItem.id,
-                episodeId: episode.id,
-                isFinished: markState
-              }))
-            )
-          } catch (error) {
-            console.error('Failed to batch mark episodes finished state', error)
-            showToast(t('ToastFailedToUpdate'), { type: 'error' })
+        setBatchMarkConfirmState({
+          isOpen: true,
+          message: markState ? t('MessageConfirmMarkAllEpisodesFinished') : t('MessageConfirmMarkAllEpisodesNotFinished'),
+          onConfirm: () => {
+            setBatchMarkConfirmState(null)
+            startTransition(async () => {
+              try {
+                await batchUpdateMediaFinishedAction(
+                  episodes.map((episode) => ({
+                    libraryItemId: libraryItem.id,
+                    episodeId: episode.id,
+                    isFinished: markState
+                  }))
+                )
+                showToast(t('ToastBatchUpdateSuccess'), { type: 'success' })
+              } catch (error) {
+                console.error('Failed to batch mark episodes finished state', error)
+                showToast(t('ToastBatchUpdateFailed'), { type: 'error' })
+              }
+            })
           }
         })
       }
     },
-    [allEpisodesFinished, filteredEpisodes, libraryItem.id, showToast, t]
+    [allEpisodesFinished, episodes, libraryItem.id, showToast, t]
   )
 
   const allSelectedEpisodesFinished = useMemo(() => {
@@ -271,31 +303,33 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
   )
 
   const isFiltered = hasMounted && filteredEpisodes.length !== episodes.length
-  const count = !isFiltered && hasMounted ? episodes.length : undefined
-  const badge = isFiltered ? `${filteredEpisodes.length} / ${episodes.length}` : undefined
+  const episodeCountLabel = hasMounted
+    ? isFiltered
+      ? `${filteredEpisodes.length} / ${episodes.length}`
+      : episodes.length > 0
+        ? String(episodes.length)
+        : ''
+    : ''
+  const useCompactEpisodeCount = episodeCountLabel.length >= 8
 
   const headerNode = (
     <div className="mb-4 flex w-full items-center px-1 pt-1">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <p className="text-xl font-medium">{t('HeaderEpisodes')}</p>
-        {count !== undefined && (
-          <div className="bg-foreground/10 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full">
-            <span className="font-mono text-sm">{count}</span>
-          </div>
-        )}
-        {badge && (
-          <div className="bg-foreground/10 flex h-6 items-center justify-center rounded-full px-3 text-sm">
-            <span className="font-mono">{badge}</span>
+        {episodeCountLabel && (
+          <div
+            className={mergeClasses(
+              'bg-foreground/10 flex shrink-0 items-center justify-center rounded-full font-mono whitespace-nowrap',
+              useCompactEpisodeCount ? 'h-5 px-2 text-xs' : isFiltered ? 'h-6 px-3 text-sm' : 'h-7 w-7 text-sm'
+            )}
+          >
+            {episodeCountLabel}
           </div>
         )}
       </div>
-      {headerActions && <div className="m-0 flex items-center gap-2">{headerActions}</div>}
+      {headerActions && <div className="flex shrink-0 items-center gap-2">{headerActions}</div>}
     </div>
   )
-
-  if (episodes.length === 0) {
-    return null
-  }
 
   if (!hasMounted) {
     return (
@@ -314,21 +348,23 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
 
       <div className="w-full">
         {/* Toolbar: Filter, Sort, Actions */}
-        <EpisodeTableToolbar
-          isSelectionMode={isSelectionMode}
-          search={search}
-          onSearchChange={setSearch}
-          filterKey={filterKey}
-          onFilterChange={setFilterKey}
-          sortKey={sortKey}
-          sortDesc={sortDesc}
-          onSortChange={(key, desc) => {
-            setSortKey(key)
-            setSortDesc(desc)
-          }}
-          contextMenuItems={contextMenuItems}
-          onContextMenuAction={handleContextMenuAction}
-        />
+        {episodes.length > 0 && (
+          <EpisodeTableToolbar
+            isSelectionMode={isSelectionMode}
+            search={search}
+            onSearchChange={setSearch}
+            filterKey={filterKey}
+            onFilterChange={setFilterKey}
+            sortKey={sortKey}
+            sortDesc={sortDesc}
+            onSortChange={(key, desc) => {
+              setSortKey(key)
+              setSortDesc(desc)
+            }}
+            contextMenuItems={contextMenuItems}
+            onContextMenuAction={handleContextMenuAction}
+          />
+        )}
 
         {/* Episodes list */}
         <div
@@ -345,9 +381,7 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
           )}
 
           {filteredEpisodes.length === 0 && !isSearching ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-lg">{t('MessageNoEpisodes')}</p>
-            </div>
+            <p className="text-foreground py-8 text-center text-lg">{t('MessageNoEpisodes')}</p>
           ) : (
             filteredEpisodes.slice(visibleStart, visibleEnd).map((episode, i) => {
               const rowIndex = visibleStart + i
@@ -355,22 +389,20 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
                 <div key={episode.id} className="absolute w-full" style={{ top: rowIndex * EPISODE_ROW_HEIGHT_PX }}>
                   <EpisodeRow
                     episode={episode}
-                    libraryItemId={libraryItem.id}
+                    libraryItem={libraryItem}
+                    episodesInOrder={filteredEpisodes}
+                    episodeIndex={rowIndex}
                     sortKey={sortKey}
-                    progress={getMediaItemProgress?.(episode.id) || null}
                     isSelected={selectedEpisodes.has(episode.id)}
                     isSelectionMode={isSelectionMode}
                     dateFormat={dateFormat}
-                    onPlay={handlePlayEpisode}
                     onView={handleViewEpisode}
-                    onToggleFinished={handleToggleFinished}
                     onSelect={handleSelectEpisode}
                     onEdit={handleEditEpisode}
+                    onMatch={handleMatchEpisode}
                     onRemove={handleRemoveEpisode}
                     onDownloadFile={handleDownloadFile}
                     onShowMoreInfo={handleShowMoreInfo}
-                    onAddToPlaylist={handleAddToPlaylist}
-                    isPlayingThisEpisode={isPlaying(libraryItem.id, episode.id)}
                     rowIndex={rowIndex}
                   />
                 </div>
@@ -380,7 +412,9 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
         </div>
       </div>
 
-      <ViewEpisodeModal isOpen={isViewEpisodeModalOpen} onClose={handleCloseViewModal} episode={viewedEpisode} libraryItem={libraryItem} />
+      {viewedEpisode && viewedEpisodeNavCtx && <ViewEpisodeModal isOpen navCtx={viewedEpisodeNavCtx} onClose={handleCloseViewModal} />}
+      {editedEpisode && editedEpisodeNavCtx && <EpisodeEditModal isOpen navCtx={editedEpisodeNavCtx} onClose={handleCloseEditModal} />}
+      {matchedEpisode && matchedEpisodeNavCtx && <EpisodeMatchModal isOpen navCtx={matchedEpisodeNavCtx} onClose={handleCloseMatchModal} />}
       <AudioFileDataModal isOpen={!!audioFileToShow} audioFile={audioFileToShow} libraryItemId={libraryItem.id} onClose={closeMoreInfo} />
       <EpisodeFeedModal
         isOpen={isEpisodeFeedModalOpen}
@@ -390,6 +424,14 @@ export default function EpisodeTable({ libraryItem, dateFormat = 'MM/dd/yyyy', e
         downloadQueue={episodeDownloadsQueued}
         episodesDownloading={episodesDownloading}
       />
+      {batchMarkConfirmState && (
+        <ConfirmDialog
+          isOpen={batchMarkConfirmState.isOpen}
+          message={batchMarkConfirmState.message}
+          onClose={() => setBatchMarkConfirmState(null)}
+          onConfirm={() => batchMarkConfirmState.onConfirm()}
+        />
+      )}
     </div>
   )
 }

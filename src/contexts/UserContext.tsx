@@ -1,6 +1,7 @@
 'use client'
 
-import { EReaderDevice, MediaProgress, ServerSettings, User, UserLoginResponse } from '@/types/api'
+import { getUserPermissionFlags } from '@/lib/userPermissions'
+import { AudioBookmark, EReaderDevice, MediaProgress, ServerSettings, User, UserLoginResponse } from '@/types/api'
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react'
 import { useSocketEvent } from './SocketContext'
 
@@ -24,6 +25,7 @@ export interface UserContextType {
   Source: string
   /** Book media id or podcast episode id matches `MediaProgress.mediaItemId` */
   getMediaItemProgress: (mediaItemId: string) => MediaProgress | undefined
+  getBookmarksForLibraryItem: (libraryItemId: string) => AudioBookmark[]
 }
 
 export const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -31,7 +33,7 @@ export const UserContext = createContext<UserContextType | undefined>(undefined)
 export function UserProvider({ children, initialUser }: { children: ReactNode; initialUser: UserLoginResponse }) {
   const [currentUserData, setCurrentUserData] = useState<UserLoginResponse>(initialUser)
   const user = currentUserData.user
-  const userIsAdminOrUp = user.type === 'admin' || user.type === 'root'
+  const permissionFlags = getUserPermissionFlags(user)
 
   useSocketEvent<User>('user_updated', (updatedUser) => {
     if (updatedUser.id === currentUserData.user.id) {
@@ -76,16 +78,14 @@ export function UserProvider({ children, initialUser }: { children: ReactNode; i
 
   const contextValue: UserContextType = {
     user,
-    userCanUpdate: !!(user.permissions?.update || userIsAdminOrUp),
-    userCanDelete: !!(user.permissions?.delete || userIsAdminOrUp),
-    userCanDownload: !!(user.permissions?.download || userIsAdminOrUp),
-    userIsAdminOrUp,
+    ...permissionFlags,
     token: user.token,
     serverSettings: currentUserData.serverSettings,
     userDefaultLibraryId: currentUserData.userDefaultLibraryId,
     ereaderDevices: currentUserData.ereaderDevices,
     Source: currentUserData.Source,
-    getMediaItemProgress: (mediaItemId: string) => user.mediaProgress.find((p) => p.mediaItemId === mediaItemId)
+    getMediaItemProgress: (mediaItemId: string) => user.mediaProgress.find((p) => p.mediaItemId === mediaItemId),
+    getBookmarksForLibraryItem: (libraryItemId: string) => user.bookmarks?.filter((bm) => bm.libraryItemId === libraryItemId) ?? []
   }
 
   return <UserContext.Provider value={contextValue}>{children}</UserContext.Provider>

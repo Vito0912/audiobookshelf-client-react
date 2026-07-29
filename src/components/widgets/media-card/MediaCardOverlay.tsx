@@ -5,6 +5,7 @@ import Tooltip from '@/components/ui/Tooltip'
 import LoadingSpinner from '@/components/widgets/LoadingSpinner'
 import MediaCardMoreMenu, { MediaCardMoreMenuItem } from '@/components/widgets/media-card/MediaCardMoreMenu'
 import MediaOverlayIconBtn from '@/components/widgets/media-card/MediaOverlayIconBtn'
+import { isDragOnlyOverlay, useSortableBookshelfOverlay, type SortableBookshelfOverlayMode } from '@/contexts/SortableBookshelfOverlayContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { mergeClasses } from '@/lib/merge-classes'
@@ -39,6 +40,7 @@ const SPACING = {
 } as const
 
 interface MediaCardOverlayProps {
+  cardId: string
   isHovering: boolean
   isSelectionMode: boolean
   selected: boolean
@@ -65,9 +67,13 @@ interface MediaCardOverlayProps {
   onMoreAction: (action: string, data?: Record<string, string>) => void
   onMoreMenuOpenChange: (isOpen: boolean) => void
   onSelect?: (event: React.MouseEvent) => void
+  dragHandle?: ReactNode
+  /** When set, overrides context `overlayMode` for drag-only overlay behavior (e.g. drag-config `overlayMode`). */
+  overlayModeOverride?: SortableBookshelfOverlayMode
 }
 
 export default function MediaCardOverlay({
+  cardId,
   isHovering,
   isSelectionMode,
   selected,
@@ -93,10 +99,17 @@ export default function MediaCardOverlay({
   onEdit,
   onMoreAction,
   onMoreMenuOpenChange,
-  onSelect
+  onSelect,
+  dragHandle,
+  overlayModeOverride
 }: MediaCardOverlayProps) {
   const { userCanUpdate } = useUser()
-  const showOverlay = (isHovering || isSelectionMode || isMoreMenuOpen) && !processing
+  const sortableBookshelfOverlay = useSortableBookshelfOverlay()
+  const dragOnly = isDragOnlyOverlay(overlayModeOverride ?? sortableBookshelfOverlay?.overlayMode)
+
+  const showOverlay = (isHovering || isSelectionMode || isMoreMenuOpen || dragOnly) && !processing
+
+  const effectiveHovering = isHovering || dragOnly
 
   const t = useTypeSafeTranslations()
 
@@ -106,6 +119,8 @@ export default function MediaCardOverlay({
     () => mergeClasses(isSelectionMode ? 'bg-black/60' : 'bg-black/40', selected && 'border-2 border-yellow-400'),
     [isSelectionMode, selected]
   )
+
+  const overlayZIndexClass = selected ? 'z-30' : 'z-10'
 
   const playButtonStyle = useMemo(() => ({ fontSize: `${playIconFontSize}em` }), [playIconFontSize])
 
@@ -166,14 +181,20 @@ export default function MediaCardOverlay({
     <>
       {/* Overlay */}
       {showOverlay && (
-        <div cy-id="overlay" className={mergeClasses('absolute start-0 top-0 z-10 h-full w-full rounded-sm bg-black md:block', overlayWrapperClasslist)}>
+        <div
+          cy-id="overlay"
+          className={mergeClasses('absolute start-0 top-0 h-full w-full rounded-sm bg-black md:block', overlayZIndexClass, overlayWrapperClasslist)}
+        >
           {/* Play button */}
-          {showPlayButton && (
-            <div cy-id="playButton" className="pointer-events-none flex h-full items-center justify-center">
+          {!dragOnly && showPlayButton && (
+            <div cy-id="playButton" className="pointer-events-none flex h-full items-center justify-center" data-overlay-action>
               <IconBtn
                 borderless
                 outlined={false}
-                className={mergeClasses('text-gray-200 hover:scale-110 hover:text-white', 'pointer-events-auto h-auto w-auto transform duration-200')}
+                className={mergeClasses(
+                  'text-gray-200 hover:scale-110 hover:not-disabled:text-white',
+                  'pointer-events-auto h-auto w-auto transform duration-200'
+                )}
                 onClick={handlePlayClick}
                 ariaLabel={isItemPlaying ? t('ButtonPlaying') : t('ButtonPlay')}
                 style={playButtonStyle}
@@ -184,11 +205,14 @@ export default function MediaCardOverlay({
           )}
 
           {/* Read button */}
-          {showReadButton && (
-            <div cy-id="readButton" className="pointer-events-none flex h-full items-center justify-center">
+          {!dragOnly && showReadButton && (
+            <div cy-id="readButton" className="pointer-events-none flex h-full items-center justify-center" data-overlay-action>
               <IconBtn
                 borderless
-                className={mergeClasses('text-gray-200 hover:scale-110 hover:text-white', 'pointer-events-auto h-auto w-auto transform duration-200')}
+                className={mergeClasses(
+                  'text-gray-200 hover:scale-110 hover:not-disabled:text-white',
+                  'pointer-events-auto h-auto w-auto transform duration-200'
+                )}
                 onClick={handleReadClick}
                 ariaLabel={t('ButtonRead')}
                 style={playButtonStyle}
@@ -199,7 +223,7 @@ export default function MediaCardOverlay({
           )}
 
           {/* Select button */}
-          {showSelectRadioButton && (
+          {showSelectRadioButton && (!dragOnly || isSelectionMode) && (
             <MediaOverlayIconBtn
               cyId="selectedRadioButton"
               position="top-start"
@@ -207,16 +231,17 @@ export default function MediaCardOverlay({
               onClick={handleSelectClick}
               ariaLabel={selected ? t('ButtonDeselect') : t('ButtonSelect')}
               selected={selected}
+              tabIndex={-1}
             />
           )}
 
           {/* Edit button */}
-          {showEditButton && userCanUpdate && !isSelectionMode && (
+          {!dragOnly && showEditButton && userCanUpdate && !isSelectionMode && (
             <MediaOverlayIconBtn cyId="editButton" position="top-end" icon="edit" onClick={handleEditClick} ariaLabel={t('ButtonEdit')} />
           )}
 
           {/* More menu icon */}
-          {!isSelectionMode && moreMenuItems.length > 0 && (
+          {!dragOnly && !isSelectionMode && moreMenuItems.length > 0 && (
             <div
               cy-id="moreButton"
               className={mergeClasses(
@@ -224,12 +249,21 @@ export default function MediaCardOverlay({
                 'hover:scale-125 hover:[&_.material-symbols]:!text-yellow-300'
               )}
             >
-              <MediaCardMoreMenu items={moreMenuItems} processing={isProcessingOrPending} onAction={onMoreAction} onOpenChange={onMoreMenuOpenChange} />
+              <MediaCardMoreMenu
+                items={moreMenuItems}
+                cardId={cardId}
+                processing={isProcessingOrPending}
+                isOpen={isMoreMenuOpen}
+                onAction={onMoreAction}
+                onOpenChange={onMoreMenuOpenChange}
+              />
             </div>
           )}
 
           {/* Overlay badges (e.g., ebook format) */}
-          {safeRender(renderOverlayBadges, 'Error rendering overlay badges:')}
+          {!dragOnly && safeRender(renderOverlayBadges, 'Error rendering overlay badges:')}
+
+          {dragHandle}
         </div>
       )}
 
@@ -242,20 +276,22 @@ export default function MediaCardOverlay({
 
       {/* Error tooltip */}
       {showError && (
-        <Tooltip text={errorText} position="right" usePortal className="absolute start-0 bottom-4 z-10" tooltipClassName="whitespace-nowrap">
-          <div
-            className={mergeClasses('bg-error flex items-center justify-end rounded-r-full shadow-md', 'border-r border-b border-red-300')}
-            style={errorBadgeStyle}
-          >
-            <span className="material-symbols pr-1 text-red-100" style={errorIconStyle}>
-              priority_high
-            </span>
-          </div>
-        </Tooltip>
+        <div className="absolute start-0 bottom-4 z-10">
+          <Tooltip text={errorText} position="right">
+            <div
+              className={mergeClasses('bg-error flex items-center justify-end rounded-r-full shadow-md', 'border-r border-b border-red-300')}
+              style={errorBadgeStyle}
+            >
+              <span className="material-symbols pr-1 text-red-100" style={errorIconStyle}>
+                priority_high
+              </span>
+            </div>
+          </Tooltip>
+        </div>
       )}
 
       {/* RSS feed & share icons */}
-      {rssFeed && !isSelectionMode && !isHovering && (
+      {rssFeed && !isSelectionMode && !effectiveHovering && (
         <div
           cy-id="rssFeed"
           className={mergeClasses('absolute start-[0.375em] top-[0.375em] z-10', 'flex items-center justify-center rounded-full bg-black/40 shadow-sm')}
@@ -266,7 +302,7 @@ export default function MediaCardOverlay({
           </span>
         </div>
       )}
-      {mediaItemShare && !isSelectionMode && !isHovering && (
+      {mediaItemShare && !isSelectionMode && !effectiveHovering && (
         <div
           cy-id="mediaItemShare"
           className={mergeClasses('absolute start-[0.375em] z-10', 'flex items-center justify-center rounded-full bg-black/40 shadow-sm')}
@@ -279,10 +315,10 @@ export default function MediaCardOverlay({
       )}
 
       {/* Type-specific badges (books/podcasts) */}
-      {safeRender(() => renderBadges?.({ isHovering, isSelectionMode, processing: isProcessingOrPending }), 'Error rendering badges:')}
+      {safeRender(() => renderBadges?.({ isHovering: effectiveHovering, isSelectionMode, processing: isProcessingOrPending }), 'Error rendering badges:')}
 
       {/* Series name overlay */}
-      {safeRender(() => renderSeriesNameOverlay?.(isHovering), 'Error rendering series name overlay:')}
+      {safeRender(() => renderSeriesNameOverlay?.(effectiveHovering), 'Error rendering series name overlay:')}
     </>
   )
 }

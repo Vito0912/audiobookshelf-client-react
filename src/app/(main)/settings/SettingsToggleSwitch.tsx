@@ -1,5 +1,5 @@
+import HelpTooltipIcon from '@/components/ui/HelpTooltipIcon'
 import ToggleSwitch from '@/components/ui/ToggleSwitch'
-import Tooltip from '@/components/ui/Tooltip'
 
 interface SettingsToggleSwitchProps {
   label: string
@@ -12,14 +12,8 @@ interface SettingsToggleSwitchProps {
 export default function SettingsToggleSwitch(props: SettingsToggleSwitchProps) {
   return (
     <div className="flex items-center">
-      <ToggleSwitch label={props.label} className="pr-0" value={props.value} onChange={props.onChange} disabled={props.disabled ?? false} />
-      {props.tooltip && (
-        <Tooltip text={props.tooltip} position="right" maxWidth={300} addTabIndex={true}>
-          <span className="material-symbols cursor-default text-lg" aria-hidden="true">
-            info
-          </span>
-        </Tooltip>
-      )}
+      <ToggleSwitch label={props.label} className="px-0" value={props.value} onChange={props.onChange} disabled={props.disabled ?? false} />
+      {props.tooltip && <HelpTooltipIcon text={props.tooltip} />}
     </div>
   )
 }

@@ -54,13 +54,19 @@ export type BookshelfEntity = LibraryItem | Series | Collection | Playlist | Aut
 // SERVER & SYSTEM
 // ============================================================================
 
+export interface AuthFormData {
+  authLoginCustomMessage?: string | null
+  authOpenIDButtonText?: string
+  authOpenIDAutoLaunch?: boolean
+}
+
 // Server status interface
 export interface ServerStatus {
   serverVersion: string
   language: string
   isInit: boolean
   authMethods: string[]
-  authFormData: Record<string, unknown>
+  authFormData: AuthFormData
   ConfigPath: string
   MetadataPath: string
   app: string
@@ -111,6 +117,8 @@ export interface ServerSettings {
   dateFormat: string
   timeFormat: string
   language: string
+  /** IANA timezone of the Audiobookshelf server host (runtime value, not user-configurable) */
+  timeZone?: string
   allowedOrigins: string[]
 
   // System info
@@ -144,6 +152,7 @@ export interface FileMetadata {
   ext: string
   path: string
   relPath: string
+  /** in bytes */
   size: number
   mtimeMs: number
   ctimeMs: number
@@ -259,10 +268,37 @@ export interface AuthorRemovedPayload {
   libraryId: string
 }
 
+/** Author book-count entry in the `authors_num_books_updated` socket event. */
+export interface AuthorNumBooksUpdate {
+  id: string
+  numBooks: number
+}
+
+/** Payload for the `authors_num_books_updated` socket event (scan-linked existing authors). */
+export interface AuthorsNumBooksUpdatedPayload {
+  libraryId: string
+  authors: AuthorNumBooksUpdate[]
+}
+
 /** Payload for the `item_removed` socket event. */
 export interface LibraryItemRemovedPayload {
   id: string
   libraryId: string
+}
+
+/** Payload for the `episode_added` socket event (expanded episode with nested library item). */
+export interface EpisodeAddedPayload {
+  id: string
+  libraryItemId?: string
+  libraryItem?: LibraryItem
+}
+
+/** Payload for the `stream_progress` socket event (HLS transcode buffer on server). */
+export interface StreamProgressPayload {
+  stream: string
+  percent: string
+  chunks: Array<number | string>
+  numSegments: number
 }
 
 export interface AuthorQuickMatchPayload {
@@ -295,6 +331,12 @@ export interface AuthorResponse {
 // SERIES
 // ============================================================================
 
+export interface SeriesProgress {
+  libraryItemIds: string[]
+  libraryItemIdsFinished: string[]
+  isFinished: boolean
+}
+
 export interface Series {
   id: string
   name: string
@@ -314,14 +356,34 @@ export interface Series {
   books?: LibraryItem[]
   /** if available (expanded only) */
   rssFeed?: RssFeed
+  /** aggregate read progress for books in the series (`?include=progress`) */
+  progress?: SeriesProgress
   /** library items (author page endpoint only) */
   items?: LibraryItem[]
+}
+
+/**
+ * Single series context the server injects on personalized shelves (e.g. continue-series)
+ * and series-filtered bookshelf rows
+ */
+export interface PersonalizedSeriesRef {
+  id: string
+  name: string
+  sequence?: string | null
+}
+
+/** Expanded library items use array of Series and personalized use a single series reference */
+export type BookMetadataSeriesField = Series[] | PersonalizedSeriesRef
+
+export function isPersonalizedSeriesRef(series: BookMetadataSeriesField): series is PersonalizedSeriesRef {
+  return !Array.isArray(series)
 }
 
 export interface CollapsedSeries {
   id: string
   name?: string
   nameIgnorePrefix?: string
+  libraryItemIds?: string[]
   numBooks?: number
   seriesSequenceList?: string
 }
@@ -381,7 +443,7 @@ export interface BookMetadata {
   subtitle?: string
   authors: Author[]
   narrators: string[]
-  series: Series[]
+  series: BookMetadataSeriesField
   /** comma-separated */
   genres: string[]
   publishedYear?: string
@@ -465,17 +527,7 @@ export interface AudioMetaTags {
 export interface AudioFile {
   index: number
   ino: string
-  metadata: {
-    filename: string
-    ext: string
-    path: string
-    relPath: string
-    /** in bytes */
-    size: number
-    mtimeMs: number
-    ctimeMs: number
-    birthtimeMs: number
-  }
+  metadata: FileMetadata
   addedAt: number
   updatedAt: number
   trackNumFromMeta?: number
@@ -484,6 +536,8 @@ export interface AudioFile {
   discNumFromMeta?: number
   /** from filename */
   discNumFromFilename?: number
+  exclude?: boolean
+  error?: string | null
   /** in seconds */
   duration: number
   bitRate: number
@@ -513,19 +567,38 @@ export interface Chapter {
   title: string
 }
 
+export interface AudibleSearchChapter {
+  title: string
+  startOffsetSec: number
+  startOffsetMs: number
+  lengthMs: number
+}
+
+export interface AudibleChapterSearchResult {
+  runtimeLengthSec: number
+  runtimeLengthMs: number
+  brandIntroDurationMs?: number
+  brandOutroDurationMs?: number
+  chapters: AudibleSearchChapter[]
+  error?: string
+  stringKey?: string
+}
+
+export interface UpdateChaptersResponse {
+  success: boolean
+  updated: boolean
+}
+
+export interface OrderedTrackFileData {
+  index: number
+  filename: string
+  ino: string
+  exclude: boolean
+}
+
 export interface EBookFile {
   ino: string
-  metadata: {
-    filename: string
-    ext: string
-    path: string
-    relPath: string
-    /** in bytes */
-    size: number
-    mtimeMs: number
-    ctimeMs: number
-    birthtimeMs: number
-  }
+  metadata: FileMetadata
   ebookFormat: string
   addedAt: number
   updatedAt: number
@@ -615,6 +688,44 @@ export interface PodcastEpisode {
   }
 }
 
+export interface UpdatePodcastEpisodePayload {
+  season?: string
+  episode?: string
+  episodeType?: string
+  title?: string
+  subtitle?: string
+  description?: string
+  pubDate?: string
+  publishedAt?: number
+  chapters?: Chapter[]
+  enclosure?: {
+    url: string
+    type?: string
+    length?: string
+  } | null
+}
+
+export interface SearchPodcastEpisodeResult {
+  title?: string
+  subtitle?: string
+  description?: string
+  episode?: string
+  episodeType?: string
+  season?: string
+  pubDate?: string
+  publishedAt?: number
+  enclosure?: {
+    url: string
+    type?: string
+    length?: string
+  }
+  guid?: string
+}
+
+export interface SearchPodcastEpisodeResponse {
+  episodes: Array<{ episode: SearchPodcastEpisodeResult }>
+}
+
 export interface PodcastEpisodeDownload {
   id: string
   episodeDisplayTitle?: string
@@ -634,6 +745,23 @@ export interface PodcastEpisodeDownload {
   episodeType?: string
   publishedAt?: number
   guid?: string
+}
+
+/** Episode from GET /api/libraries/:id/recent-episodes (includes nested podcast show) */
+export interface RecentPodcastEpisode extends PodcastEpisode {
+  libraryId: string
+  podcast: PodcastMedia
+}
+
+export interface GetEpisodeDownloadQueueResponse {
+  currentDownload?: PodcastEpisodeDownload
+  queue: PodcastEpisodeDownload[]
+}
+
+export interface GetRecentEpisodesResponse {
+  episodes: RecentPodcastEpisode[]
+  limit: number
+  page: number
 }
 
 // ============================================================================
@@ -726,7 +854,7 @@ export interface MediaProgress {
   currentTime: number
   isFinished: boolean
   hideFromContinueListening?: boolean
-  ebookLocation?: string
+  ebookLocation?: string | number
   ebookProgress: number
   finishedAt?: number
   lastUpdate: number
@@ -873,6 +1001,137 @@ export interface EReaderDevice {
   availabilityOption: 'adminOrUp' | 'userOrUp' | 'guestOrUp' | 'specificUsers'
   /** User IDs with access (only when availabilityOption is 'specificUsers') */
   users?: string[]
+}
+
+export interface EmailSettings {
+  id: string
+  host: string | null
+  port: number
+  secure: boolean
+  rejectUnauthorized: boolean
+  user: string | null
+  pass: string | null
+  testAddress: string | null
+  fromAddress: string | null
+  ereaderDevices: EReaderDevice[]
+}
+
+export type EmailSettingsFormFields = Pick<EmailSettings, 'host' | 'port' | 'secure' | 'rejectUnauthorized' | 'user' | 'pass' | 'testAddress' | 'fromAddress'>
+
+export interface GetEmailSettingsResponse {
+  settings: EmailSettings
+}
+
+export interface UpdateEmailSettingsResponse {
+  settings: EmailSettings
+}
+
+export interface UpdateEReaderDevicesResponse {
+  ereaderDevices: EReaderDevice[]
+}
+
+export interface NotificationEvent {
+  name: string
+  requiresLibrary: boolean
+  libraryMediaType?: string
+  description: string
+  descriptionKey: string
+  variables: string[]
+  defaults: {
+    title: string
+    body: string
+  }
+  testData: Record<string, string>
+}
+
+export interface Notification {
+  id: string
+  libraryId: string | null
+  eventName: string
+  urls: string[]
+  titleTemplate: string
+  bodyTemplate: string
+  type: string | null
+  enabled: boolean
+  lastFiredAt: number | null
+  lastAttemptFailed: boolean
+  numConsecutiveFailedAttempts: number
+  numTimesFired: number
+  createdAt: number
+}
+
+export interface NotificationSettings {
+  id: string
+  appriseType: string
+  appriseApiUrl: string | null
+  notifications: Notification[]
+  maxFailedAttempts: number
+  maxNotificationQueue: number
+  notificationDelay: number
+}
+
+export interface NotificationData {
+  events: NotificationEvent[]
+}
+
+export interface GetNotificationsResponse {
+  data: NotificationData
+  settings: NotificationSettings
+}
+
+export type NotificationSettingsPatch = Pick<NotificationSettings, 'appriseApiUrl' | 'maxNotificationQueue' | 'maxFailedAttempts'>
+
+export interface NotificationFormPayload {
+  id?: string
+  libraryId?: string | null
+  eventName: string
+  urls: string[]
+  titleTemplate: string
+  bodyTemplate: string
+  enabled: boolean
+  type?: string | null
+}
+
+export type NotificationUpdatePayload = Partial<NotificationFormPayload>
+
+export interface OpenIdIssuerConfig {
+  issuer?: string
+  authorization_endpoint?: string
+  token_endpoint?: string
+  userinfo_endpoint?: string
+  end_session_endpoint?: string
+  jwks_uri?: string
+  id_token_signing_alg_values_supported?: string[]
+}
+
+export interface AuthenticationSettings {
+  authLoginCustomMessage?: string | null
+  authActiveAuthMethods: AuthMethod[]
+  authOpenIDIssuerURL?: string | null
+  authOpenIDAuthorizationURL?: string | null
+  authOpenIDTokenURL?: string | null
+  authOpenIDUserInfoURL?: string | null
+  authOpenIDJwksURL?: string | null
+  authOpenIDLogoutURL?: string | null
+  authOpenIDClientID?: string | null
+  authOpenIDClientSecret?: string | null
+  authOpenIDTokenSigningAlgorithm: string
+  authOpenIDButtonText: string
+  authOpenIDAutoLaunch: boolean
+  authOpenIDAutoRegister: boolean
+  authOpenIDMatchExistingBy?: string | null
+  authOpenIDMobileRedirectURIs?: string[]
+  authOpenIDGroupClaim?: string | null
+  authOpenIDAdvancedPermsClaim?: string | null
+  authOpenIDSubfolderForRedirectURLs?: string
+  authOpenIDSamplePermissions?: string
+}
+
+export type AuthenticationSettingsPatch = Omit<AuthenticationSettings, 'authOpenIDSamplePermissions'>
+
+export interface UpdateAuthSettingsResponse {
+  updated: boolean
+  serverSettings: ServerSettings
 }
 
 export interface UserLoginResponse {
@@ -1074,6 +1333,10 @@ export function isPodcastLibraryItem(item: LibraryItem): item is PodcastLibraryI
   return item.mediaType === 'podcast'
 }
 
+export function isBookMediaWithTracks(media: BookMedia | PodcastMedia): boolean {
+  return isBookMedia(media) && (media.tracks ? media.tracks.length : media.numTracks || 0) > 0
+}
+
 // ============================================================================
 // SEARCH & MATCH TYPES
 // ============================================================================
@@ -1154,6 +1417,10 @@ export interface UpdateLibraryItemMediaPayload {
   }
   tags?: string[]
   url?: string
+  autoDownloadEpisodes?: boolean
+  autoDownloadSchedule?: string
+  maxEpisodesToKeep?: number
+  maxNewEpisodesToDownload?: number
 }
 
 export interface UpdateLibraryItemMediaResponse {
@@ -1161,9 +1428,32 @@ export interface UpdateLibraryItemMediaResponse {
   libraryItem?: LibraryItem
 }
 
+export interface BatchGetLibraryItemsResponse {
+  libraryItems: LibraryItem[]
+}
+
+export interface BatchUpdateLibraryItemPayload {
+  id: string
+  mediaPayload: UpdateLibraryItemMediaPayload
+}
+
+export interface BatchUpdateLibraryItemsResponse {
+  success: boolean
+  updates: number
+}
+
 // ============================================================================
 // TASKS & PROGRESS TRACKING
 // ============================================================================
+
+/** FFmpeg metadata tags that would be embedded into audio files (empty values omitted). */
+export type MetadataObject = Record<string, string>
+
+export interface M4bEncodeOptions {
+  bitrate: string
+  channels: string | number
+  codec: string
+}
 
 export interface Task {
   id: string
@@ -1171,6 +1461,7 @@ export interface Task {
   data?: {
     libraryId?: string
     libraryItemId?: string
+    encodeOptions?: M4bEncodeOptions
     [key: string]: unknown
   }
   title: string | null
@@ -1480,6 +1771,59 @@ export interface FetchPodcastFeedResponse {
   podcast: RssPodcast
 }
 
+export interface PodcastTitleInLibrary {
+  title: string
+  itunesId: string | number | null
+  libraryItemId: string
+  libraryId: string
+}
+
+export interface GetPodcastTitlesResponse {
+  podcasts: PodcastTitleInLibrary[]
+}
+
+export interface OpmlFeed {
+  title: string
+  feedUrl: string
+}
+
+export interface ParseOpmlFeedsResponse {
+  feeds: OpmlFeed[]
+}
+
+export interface CreatePodcastsFromOpmlPayload {
+  feeds: string[]
+  folderId: string
+  libraryId: string
+  autoDownloadEpisodes: boolean
+}
+
+export interface CreatePodcastMetadataPayload {
+  title: string
+  author: string
+  description: string
+  releaseDate: string
+  genres: string[]
+  feedUrl: string
+  imageUrl: string
+  itunesPageUrl: string
+  itunesId: string
+  itunesArtistId: string
+  language: string
+  explicit: boolean
+  type: string
+}
+
+export interface CreatePodcastPayload {
+  path: string
+  folderId: string
+  libraryId: string
+  media: {
+    metadata: CreatePodcastMetadataPayload
+    autoDownloadEpisodes: boolean
+  }
+}
+
 // ============================================================================
 // OPEN RSS FEED
 // ============================================================================
@@ -1496,4 +1840,44 @@ export interface OpenRssFeedPayload {
 
 export interface OpenRssFeedResponse {
   feed: RssFeed
+}
+
+// ============================================================================
+// Library Stats
+// ============================================================================
+
+interface LargestItem {
+  id: string
+  title: string
+  size: number // size in bytes
+}
+
+interface AuthorWithCount {
+  id: string
+  name: string
+  count: number
+}
+
+interface GenreWithCount {
+  genre: string
+  count: number
+}
+
+interface LongestItem {
+  id: string
+  title: string
+  duration: number
+}
+
+export interface LibraryStatsResponse {
+  largestItems: LargestItem[]
+  totalAuthors?: number // only for books
+  authorsWithCount?: AuthorWithCount[] // only for books
+  totalGenres: number
+  genresWithCount: GenreWithCount[]
+  totalItems: number
+  longestItems: LongestItem[]
+  totalSize: number
+  totalDuration: number
+  numAudioTracks: number
 }

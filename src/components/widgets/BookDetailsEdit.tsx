@@ -10,7 +10,10 @@ import SlateEditor from '../ui/SlateEditor'
 import TextInput from '../ui/TextInput'
 import TwoStageMultiSelect from '../ui/TwoStageMultiSelect'
 
-type Details = Omit<BookMetadata, 'titleIgnorePrefix' | 'descriptionPlain' | 'publishedDate'>
+type Details = Omit<BookMetadata, 'titleIgnorePrefix' | 'descriptionPlain' | 'publishedDate' | 'series'> & {
+  /** Edit forms always work with the expanded `Series[]` shape. */
+  series: Series[]
+}
 
 export type BookDetailsEditRef = DetailsEditRef<Details>
 export type BookUpdatePayload = UpdatePayload<Details>
@@ -42,6 +45,16 @@ const BookDetailsEdit = ({
 
   const media = useMemo(() => libraryItem.media || {}, [libraryItem.media])
 
+  const editMetadata = useMemo((): Details => {
+    const meta = media.metadata as BookMetadata
+    return {
+      ...meta,
+      series: Array.isArray(meta?.series) ? meta.series : []
+    }
+  }, [media.metadata])
+
+  const editTags = useMemo(() => [...(media.tags || [])], [media.tags])
+
   const batchAppendLogic = useCallback(
     (state: { details: Details }, detailsToUpdate: Partial<Details>) => ({
       ...state.details,
@@ -69,8 +82,8 @@ const BookDetailsEdit = ({
     submitForm,
     initialDetails
   } = useDetailsEdit<Details>({
-    metadata: (media.metadata as Details) || {},
-    tags: media.tags || [],
+    metadata: editMetadata,
+    tags: editTags,
     libraryItemId: libraryItem.id,
     ref,
     extractAuthor,
@@ -281,8 +294,8 @@ const BookDetailsEdit = ({
           <div className="mt-2 w-1/2 px-1 md:mt-0 md:w-1/4">
             <TextInput value={details.language || ''} onChange={handleFieldUpdate('language')} label={t('LabelLanguage')} />
           </div>
-          <div className="mt-2 grow px-1 pt-6 md:mt-0">
-            <div className="flex justify-center">
+          <div className="mt-2 flex w-full items-center gap-6 px-1 md:contents">
+            <div className="flex h-10 flex-1 items-center md:mt-6 md:w-1/4 md:flex-none md:px-1">
               <Checkbox
                 value={details.explicit}
                 onChange={handleFieldUpdate('explicit')}
@@ -292,9 +305,7 @@ const BookDetailsEdit = ({
                 labelClass="ps-2 text-base font-semibold"
               />
             </div>
-          </div>
-          <div className="mt-2 grow px-1 pt-6 md:mt-0">
-            <div className="flex justify-center">
+            <div className="flex h-10 flex-1 items-center md:mt-6 md:w-1/4 md:flex-none md:px-1">
               <Checkbox
                 value={details.abridged}
                 onChange={handleFieldUpdate('abridged')}

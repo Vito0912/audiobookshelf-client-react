@@ -12,15 +12,30 @@ import PlaylistCardSkeleton from '@/components/widgets/media-card/PlaylistCardSk
 import PodcastMediaCard from '@/components/widgets/media-card/PodcastMediaCard'
 import SeriesCard from '@/components/widgets/media-card/SeriesCard'
 import SeriesCardSkeleton from '@/components/widgets/media-card/SeriesCardSkeleton'
+import type { SortableBookshelfCardOptions } from '@/components/widgets/media-card/SortableBookshelfCard'
 import { UpdateSettingFn } from '@/contexts/LibraryContext'
 import { useUser } from '@/contexts/UserContext'
-import { Author, BookshelfEntity, BookshelfView, Collection, EntityType, Library, LibraryItem, MediaProgress, Playlist, Series, User } from '@/types/api'
+import { useBookshelfCardSelection } from '@/hooks/useBookshelfCardSelection'
+import { downloadLibraryOpml } from '@/lib/download'
+import { computeCollapsedSeriesProgress } from '@/lib/mediaProgress'
+import type { ShelfNavigationEntity } from '@/lib/shelfNavigationEntity'
+import { userCanDownload, userCanUpdate } from '@/lib/userPermissions'
+import {
+  Author,
+  BookshelfEntity,
+  BookshelfView,
+  Collection,
+  EntityType,
+  Library,
+  LibraryItem,
+  MediaProgress,
+  Playlist,
+  PodcastEpisode,
+  Series,
+  User
+} from '@/types/api'
 import { TranslationKey } from '@/types/translations'
-import React, { type MouseEvent, type ReactNode } from 'react'
-
-/** Selection is unused on the bookshelf; stable identity so memo(MediaCard) can skip unchanged cards. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function bookshelfCardNoopSelect(_event: MouseEvent) {}
+import React, { type ReactNode } from 'react'
 
 export interface SkeletonComponentProps {
   bookshelfView: BookshelfView
@@ -39,8 +54,16 @@ export interface CardComponentProps {
   orderBy?: string
   seriesSortBy?: string
   mediaItemProgressMap: Map<string, MediaProgress>
-  shelfEntities?: (BookshelfEntity | null)[]
+  shelfEntities?: (ShelfNavigationEntity | null)[]
   entityIndex?: number
+  /** Sortable collection bookshelf: options from `SortableBookshelfCard` (drag activator + overlay override). */
+  sortableBookshelfCardOptions?: SortableBookshelfCardOptions
+  /** When set, display this podcast episode instead of the library item (playlist episode entries). */
+  episode?: PodcastEpisode
+  /** When true, wire multi-select for library item cards (items bookshelf only). */
+  bookshelfSelectionEnabled?: boolean
+  /** Scope id for multi-select (per page or per shelf). */
+  selectionScopeId?: string
 }
 
 export interface EntityConfig {
@@ -52,7 +75,7 @@ export interface EntityConfig {
     settings: { showSubtitles: boolean; collapseSeries: boolean }
   ) => { textKey: TranslationKey; action: string }[]
 
-  handleContextMenuAction: (action: string, helpers: { updateSetting: UpdateSettingFn }) => void
+  handleContextMenuAction: (action: string, helpers: { updateSetting: UpdateSettingFn; library: Library }) => void
 
   getEmptyMessageKey: (filterBy: string, isPodcastLibrary: boolean) => TranslationKey | ''
 
@@ -70,13 +93,19 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       </>
     ),
     getContextMenuItems: (user, library, settings) => {
-      const menuItems: { textKey: TranslationKey; action: string }[] = [
-        {
+      const menuItems: { textKey: TranslationKey; action: string }[] = []
+      if (library.mediaType === 'podcast' && userCanDownload(user)) {
+        menuItems.push({
+          textKey: 'LabelExportOPML',
+          action: 'export-opml'
+        })
+      }
+
+      if (library.mediaType === 'book') {
+        menuItems.push({
           textKey: settings.showSubtitles ? 'LabelHideSubtitles' : 'LabelShowSubtitles',
           action: settings.showSubtitles ? 'hide-subtitles' : 'show-subtitles'
-        }
-      ]
-      if (library.mediaType === 'book') {
+        })
         menuItems.push({
           textKey: settings.collapseSeries ? 'LabelExpandSeries' : 'LabelCollapseSeries',
           action: settings.collapseSeries ? 'expand-series' : 'collapse-series'
@@ -84,8 +113,10 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       }
       return menuItems
     },
-    handleContextMenuAction: (action, { updateSetting }) => {
-      if (action === 'show-subtitles') {
+    handleContextMenuAction: (action, { updateSetting, library }) => {
+      if (action === 'export-opml') {
+        downloadLibraryOpml(library.id)
+      } else if (action === 'show-subtitles') {
         updateSetting('showSubtitles', true)
       } else if (action === 'hide-subtitles') {
         updateSetting('showSubtitles', false)
@@ -105,23 +136,50 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     SkeletonComponent: ({ bookshelfView, showSubtitles, orderBy }) => (
       <MediaCardSkeleton bookshelfView={bookshelfView} showSubtitles={showSubtitles} orderBy={orderBy} />
     ),
-    CardComponent: ({ entity, bookshelfView, width, isPodcastLibrary, showSubtitles, orderBy, mediaItemProgressMap, shelfEntities, entityIndex }) => {
+    CardComponent: ({
+      entity,
+      bookshelfView,
+      width,
+      isPodcastLibrary,
+      showSubtitles,
+      orderBy,
+      seriesSortBy,
+      mediaItemProgressMap,
+      shelfEntities,
+      entityIndex,
+      sortableBookshelfCardOptions,
+      episode,
+      bookshelfSelectionEnabled = false,
+      selectionScopeId = 'bookshelf:items'
+    }) => {
+      void seriesSortBy
       const { user, serverSettings, ereaderDevices } = useUser()
       const item = entity as LibraryItem
       const isCollapsedSeries = !!item.collapsedSeries
-      const entityProgress = isPodcastLibrary ? null : item.media?.id ? mediaItemProgressMap.get(item.media.id) : undefined
+      const mediaItemId = episode?.id ?? item.media?.id ?? null
+      const entityProgress = mediaItemId ? mediaItemProgressMap.get(mediaItemId) : undefined
+
+      const { isSelectionMode, selected, onSelect, selectionKey } = useBookshelfCardSelection(item, entityIndex, shelfEntities, episode, {
+        enabled: bookshelfSelectionEnabled && !isCollapsedSeries,
+        scopeId: selectionScopeId
+      })
+
       const EntityMediaCard = isPodcastLibrary ? PodcastMediaCard : BookMediaCard
 
       if (isCollapsedSeries) {
+        const libraryItemIds = item.collapsedSeries?.libraryItemIds
+        const seriesProgressPercent =
+          libraryItemIds && libraryItemIds.length > 0 ? computeCollapsedSeriesProgress(user.mediaProgress, libraryItemIds) : undefined
+
         return (
           <div style={{ width: `${width}px`, flexShrink: 0 }}>
             <CollapsedSeriesCard
               libraryItem={item}
               bookshelfView={bookshelfView}
               mediaProgress={entityProgress}
+              seriesProgressPercent={seriesProgressPercent}
               isSelectionMode={false}
               selected={false}
-              onSelect={bookshelfCardNoopSelect}
               dateFormat={serverSettings?.dateFormat ?? 'MM/dd/yyyy'}
               timeFormat={serverSettings?.timeFormat ?? 'HH:mm'}
               showSubtitles={showSubtitles ?? false}
@@ -135,11 +193,12 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
         <div style={{ width: `${width}px`, flexShrink: 0 }}>
           <EntityMediaCard
             libraryItem={item}
+            episode={episode}
             bookshelfView={bookshelfView}
             mediaProgress={entityProgress}
-            isSelectionMode={false}
-            selected={false}
-            onSelect={bookshelfCardNoopSelect}
+            isSelectionMode={isSelectionMode}
+            selected={selected}
+            onSelect={onSelect}
             dateFormat={serverSettings?.dateFormat ?? 'MM/dd/yyyy'}
             timeFormat={serverSettings?.timeFormat ?? 'HH:mm'}
             userPermissions={user.permissions}
@@ -148,6 +207,8 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
             orderBy={orderBy ?? ''}
             shelfEntities={shelfEntities}
             entityIndex={entityIndex}
+            dragOptions={sortableBookshelfCardOptions}
+            selectionAnchorKey={selectionKey}
           />
         </div>
       )
@@ -189,7 +250,7 @@ export const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       </>
     ),
     getContextMenuItems: (user) => {
-      if (user.permissions?.update) {
+      if (userCanUpdate(user)) {
         return [{ textKey: 'ButtonMatchAllAuthors', action: 'match-all-authors' }]
       }
       return []

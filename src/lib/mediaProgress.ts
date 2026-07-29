@@ -9,6 +9,51 @@ export function buildMediaItemProgressMap(mediaProgress: MediaProgress[]): Map<s
   return map
 }
 
+/**
+ * TODO: Media item progress should be fetched using mediaItemId when new API is implemented
+ */
+/** Progress for a library item (book) from a map built with {@link buildMediaItemProgressMap}. */
+export function getLibraryItemProgressFromMap(
+  map: Map<string, MediaProgress>,
+  libraryItem: { id: string; media?: { id?: string } | null }
+): MediaProgress | null {
+  const mediaItemId = libraryItem.media?.id
+  if (mediaItemId) {
+    const byMediaItem = map.get(mediaItemId)
+    if (byMediaItem) return byMediaItem
+  }
+  return map.get(libraryItem.id) ?? null
+}
+
+export function getMediaItemProgress(mediaProgress: MediaProgress[], libraryItemId: string, episodeId?: string): MediaProgress | null {
+  if (episodeId) {
+    return mediaProgress.find((p) => p.libraryItemId === libraryItemId && p.episodeId === episodeId) ?? null
+  }
+  return mediaProgress.find((p) => p.libraryItemId === libraryItemId && !p.episodeId) ?? null
+}
+
+/** True when every book in the series has finished progress (matches server series progress). */
+export function computeIsSeriesFinished(mediaProgress: MediaProgress[], libraryItemIds: readonly string[]): boolean {
+  if (libraryItemIds.length === 0) return false
+  return libraryItemIds.every((libraryItemId) => getMediaItemProgress(mediaProgress, libraryItemId)?.isFinished)
+}
+
+/** Average progress (0–1) across books in a collapsed sub-series card. */
+export function computeCollapsedSeriesProgress(mediaProgress: MediaProgress[], libraryItemIds: readonly string[]): number {
+  if (libraryItemIds.length === 0) return 0
+
+  let progressPercent = 0
+  for (const libraryItemId of libraryItemIds) {
+    const progress = getMediaItemProgress(mediaProgress, libraryItemId)
+    if (progress) {
+      const useEbookProgress = !progress.progress && progress.ebookProgress > 0
+      progressPercent += progress.isFinished ? 1 : useEbookProgress ? progress.ebookProgress || 0 : progress.progress || 0
+    }
+  }
+
+  return progressPercent / libraryItemIds.length
+}
+
 /** Progress rows for one podcast library item, keyed by podcast episode id (mediaItemId) */
 export function buildPodcastEpisodeProgressMap(podcastLibraryItemId: string, mediaProgress: MediaProgress[]): Map<string, MediaProgress> {
   const map = new Map<string, MediaProgress>()

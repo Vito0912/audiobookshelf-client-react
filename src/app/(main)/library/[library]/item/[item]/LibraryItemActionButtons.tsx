@@ -3,6 +3,7 @@
 import AddToCollectionModal from '@/components/modals/AddToCollectionModal'
 import AddToPlaylistModal from '@/components/modals/AddToPlaylistModal'
 import MatchModal from '@/components/modals/MatchModal'
+import PodcastDownloadScheduleModal from '@/components/modals/PodcastDownloadScheduleModal'
 import RssFeedOpenCloseModal from '@/components/modals/RssFeedOpenCloseModal'
 import ShareModal from '@/components/modals/ShareModal'
 import Btn from '@/components/ui/Btn'
@@ -15,18 +16,30 @@ import { useMediaCardActions } from '@/components/widgets/media-card/useMediaCar
 import { useMediaContext } from '@/contexts/MediaContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
-import { PlayerState, type BookLibraryItem, type PodcastLibraryItem, type RssFeed } from '@/types/api'
+import { formatJsDate } from '@/lib/datefns'
+import { getEbookFormat } from '@/lib/ereader/ereaderEbook'
+import { buildBookQueueItem, getPodcastItemPagePlaybackParams } from '@/lib/playerQueue'
+import { PlayerState, type BookLibraryItem, type PodcastEpisode, type PodcastLibraryItem, type RssFeed } from '@/types/api'
 import { useCallback, useMemo, useState } from 'react'
 
 interface LibraryItemActionButtonsProps {
   libraryItem: BookLibraryItem | PodcastLibraryItem
   onEdit: () => void
+  onOpenCoverEdit?: () => void
   /** Current RSS feed state (from useItemPageSocket + initial server data). */
   rssFeed?: RssFeed | null
+  /** Filtered/sorted podcast episodes from EpisodeTable (item-page Play). */
+  getPodcastEpisodesInOrder?: () => PodcastEpisode[]
 }
 
-export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed = null }: LibraryItemActionButtonsProps) {
-  const { userCanUpdate, getMediaItemProgress, ereaderDevices } = useUser()
+export default function LibraryItemActionButtons({
+  libraryItem,
+  onEdit,
+  onOpenCoverEdit,
+  rssFeed = null,
+  getPodcastEpisodesInOrder
+}: LibraryItemActionButtonsProps) {
+  const { userCanUpdate, getMediaItemProgress, ereaderDevices, user, serverSettings } = useUser()
   const {
     playItem,
     libraryItemIdStreaming,
@@ -37,7 +50,8 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
     getIsMediaQueued,
     addItemToQueue,
     removeItemFromQueue,
-    playerHandler
+    playerControls,
+    playerLoadState
   } = useMediaContext()
   const t = useTypeSafeTranslations()
   const [matchModalOpen, setMatchModalOpen] = useState(false)
@@ -52,28 +66,30 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
   const isBook = libraryItem.mediaType === 'book'
   const bookMedia = !isPodcast ? libraryItem.media : null
   const podcastMedia = isPodcast ? libraryItem.media : null
-  const tracks = isBook ? (bookMedia?.tracks ?? []) : []
-  const podcastEpisodes = isPodcast ? (podcastMedia?.episodes ?? []) : []
-  const ebookFile = isBook ? bookMedia?.ebookFile : undefined
+  const tracks = useMemo(() => (isBook ? (bookMedia?.tracks ?? []) : []), [isBook, bookMedia?.tracks])
+  const podcastEpisodes = useMemo(() => (isPodcast ? (podcastMedia?.episodes ?? []) : []), [isPodcast, podcastMedia?.episodes])
+  const ebookFormat = bookMedia ? getEbookFormat(bookMedia) : undefined
 
   const showPlayButton = !libraryItem.isMissing && !libraryItem.isInvalid && (isPodcast ? podcastEpisodes.length > 0 : tracks.length > 0)
   const isStreaming = isStreamingFn(libraryItem.id, null)
   const isItemPlaying = isPlayingFn(libraryItem.id, null)
   const showQueueBtn = isBook && !!streamLibraryItem && !isStreamingFromDifferentLibrary(libraryItem.libraryId)
   const isQueued = getIsMediaQueued(libraryItem.id, null)
-  const showReadButton = isBook && !!ebookFile
+  const showReadButton = !!ebookFormat
   const isStreamingFromDifferentLib = isStreamingFromDifferentLibrary(libraryItem.libraryId)
 
   const {
     processing,
     confirmState,
     rssFeedModalOpen,
+    scheduleModalOpen,
     shareModalOpen,
     collectionsModalOpen,
     playlistsModalOpen,
     mediaItemShare,
     closeConfirm,
     closeRssFeedModal,
+    closeScheduleModal,
     closeShareModal,
     closeCollectionsModal,
     closePlaylistsModal,
@@ -102,20 +118,54 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
       window.location.href = `/library/${libraryItem.libraryId}`
     },
     onOpenMatch: handleOpenMatch,
-    playerControls: playerHandler.controls
+    onOpenCoverEdit,
+    playerControls
   })
 
   const handlePlay = useCallback(() => {
     if (isStreaming) {
-      playerHandler.controls.playPause()
+      playerControls.playPause()
       return
     }
+
+    if (isPodcast) {
+      const dateFormat = serverSettings.dateFormat ?? 'MM/dd/yyyy'
+      const podcastEpisodesInOrder = getPodcastEpisodesInOrder?.() ?? []
+      const playback = getPodcastItemPagePlaybackParams(
+        podcastEpisodesInOrder.length > 0 ? podcastEpisodesInOrder : podcastEpisodes,
+        libraryItem as PodcastLibraryItem,
+        user.mediaProgress,
+        (episode) =>
+          episode.publishedAt ? t('LabelPublishedDate', { 0: formatJsDate(new Date(episode.publishedAt), dateFormat) }) : t('LabelUnknownPublishDate')
+      )
+      if (!playback) return
+
+      void playItem({
+        libraryItem,
+        episodeId: playback.episodeId,
+        queueItems: playback.queueItems
+      })
+      return
+    }
+
+    const queueItem = buildBookQueueItem(libraryItem)
     void playItem({
       libraryItem,
       episodeId: null,
-      queueItems: []
+      queueItems: queueItem ? [queueItem] : []
     })
-  }, [isStreaming, libraryItem, playItem, playerHandler.controls])
+  }, [
+    isPodcast,
+    isStreaming,
+    libraryItem,
+    playItem,
+    playerControls,
+    podcastEpisodes,
+    getPodcastEpisodesInOrder,
+    serverSettings.dateFormat,
+    t,
+    user.mediaProgress
+  ])
 
   const handleQueueClick = useCallback(() => {
     if (isQueued) {
@@ -143,7 +193,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
 
   const contextMenuItems = useMemo<ContextMenuDropdownItem<string>[]>(() => {
     return moreMenuItems
-      .filter((item) => item.func !== 'toggleFinished')
+      .filter((item) => item.func !== 'toggleFinished' && item.func !== 'addToQueue' && item.func !== 'removeFromQueue')
       .map((item) => ({
         text: item.text,
         action: item.func ?? '',
@@ -170,7 +220,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
         {showPlayButton && (
           <Btn
             onClick={handlePlay}
-            loading={playerHandler.state.playerState === PlayerState.LOADING}
+            loading={playerLoadState === PlayerState.LOADING}
             color="bg-success"
             size="small"
             className="mr-2 flex h-9 items-center px-4"
@@ -265,6 +315,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
           hasEpisodesWithoutPubDate: isPodcast && podcastEpisodes.some((ep) => !ep.pubDate)
         }}
       />
+      {isPodcast && <PodcastDownloadScheduleModal isOpen={scheduleModalOpen} onClose={closeScheduleModal} libraryItem={libraryItem as PodcastLibraryItem} />}
       <ShareModal
         isOpen={shareModalOpen}
         onClose={closeShareModal}
@@ -277,7 +328,7 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
           isOpen={collectionsModalOpen}
           onClose={closeCollectionsModal}
           libraryId={libraryItem.libraryId}
-          libraryItemId={libraryItem.id}
+          libraryItemIds={[libraryItem.id]}
           itemTitle={libraryItem.media.metadata.title ?? ''}
         />
       )}
@@ -286,9 +337,8 @@ export default function LibraryItemActionButtons({ libraryItem, onEdit, rssFeed 
           isOpen={playlistsModalOpen}
           onClose={closePlaylistsModal}
           libraryId={libraryItem.libraryId}
-          libraryItemId={libraryItem.id}
-          episodeId={null}
-          itemTitle={libraryItem.media.metadata.title ?? ''}
+          items={[{ libraryItemId: libraryItem.id, episodeId: null }]}
+          headerTitle={libraryItem.media.metadata.title ?? ''}
         />
       )}
       <MatchModal isOpen={matchModalOpen} onClose={() => setMatchModalOpen(false)} libraryItem={libraryItem} />

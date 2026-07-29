@@ -6,14 +6,14 @@ import AuthorImage from '@/components/covers/AuthorImage'
 import IconBtn from '@/components/ui/IconBtn'
 import ExpandableHtml from '@/components/widgets/ExpandableHtml'
 import ItemSlider from '@/components/widgets/ItemSlider'
-import BookMediaCard from '@/components/widgets/media-card/BookMediaCard'
+import SelectableShelfMediaCard from '@/components/widgets/media-card/SelectableShelfMediaCard'
 import { useCardSize } from '@/contexts/CardSizeContext'
 import { useLibrary } from '@/contexts/LibraryContext'
 import { useSocketEvent } from '@/contexts/SocketContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { filterEncode } from '@/lib/filterUtils'
-import { Author, BookshelfView } from '@/types/api'
+import { Author, AuthorsNumBooksUpdatedPayload, BookshelfView } from '@/types/api'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -53,6 +53,16 @@ export default function AuthorClient({ author: authorProp }: AuthorClientProps) 
     [author.id]
   )
 
+  const handleAuthorsNumBooksUpdated = useCallback(
+    (payload: AuthorsNumBooksUpdatedPayload) => {
+      const update = payload.authors.find((a) => a.id === author.id)
+      if (update) {
+        setAuthor((prev) => ({ ...prev, numBooks: update.numBooks }))
+      }
+    },
+    [author.id]
+  )
+
   const handleAuthorRemoved = useCallback(
     (data: Author | { id: string; libraryId: string }) => {
       const id = 'id' in data ? data.id : (data as Author).id
@@ -65,6 +75,7 @@ export default function AuthorClient({ author: authorProp }: AuthorClientProps) 
   )
 
   useSocketEvent<Author>('author_updated', handleAuthorUpdated)
+  useSocketEvent<AuthorsNumBooksUpdatedPayload>('authors_num_books_updated', handleAuthorsNumBooksUpdated)
   useSocketEvent<Author | { id: string; libraryId: string }>('author_removed', handleAuthorRemoved)
 
   return (
@@ -102,12 +113,14 @@ export default function AuthorClient({ author: authorProp }: AuthorClientProps) 
             }
             className="!ps-0"
           >
-            {libraryItems.map((libraryItem) => {
+            {libraryItems.map((libraryItem, entityIndex) => {
               const mediaProgress = libraryItem.media?.id ? getMediaItemProgress(libraryItem.media.id) : undefined
               return (
                 <div key={libraryItem.id} className="mx-2e shrink-0">
-                  <BookMediaCard
+                  <SelectableShelfMediaCard
+                    scopeId="author-books"
                     libraryItem={libraryItem}
+                    cardType="book"
                     bookshelfView={BookshelfView.DETAIL}
                     dateFormat={serverSettings?.dateFormat ?? 'MM/dd/yyyy'}
                     timeFormat={serverSettings?.timeFormat ?? 'HH:mm'}
@@ -115,6 +128,8 @@ export default function AuthorClient({ author: authorProp }: AuthorClientProps) 
                     ereaderDevices={ereaderDevices}
                     showSubtitles={showSubtitles}
                     mediaProgress={mediaProgress}
+                    shelfEntities={libraryItems}
+                    entityIndex={entityIndex}
                   />
                 </div>
               )
@@ -135,12 +150,15 @@ export default function AuthorClient({ author: authorProp }: AuthorClientProps) 
         return (
           <div key={bookSeries.id} className="-ms-2e shrink-0">
             <ItemSlider title={seriesTitle} className="!ps-0">
-              {bookSeries.items?.map((libraryItem) => {
+              {bookSeries.items?.map((libraryItem, entityIndex) => {
                 const mediaProgress = libraryItem.media?.id ? getMediaItemProgress(libraryItem.media.id) : undefined
+                const seriesItems = bookSeries.items ?? []
                 return (
                   <div key={libraryItem.id} className="mx-2e shrink-0">
-                    <BookMediaCard
+                    <SelectableShelfMediaCard
+                      scopeId={bookSeries.id}
                       libraryItem={libraryItem}
+                      cardType="book"
                       bookshelfView={BookshelfView.DETAIL}
                       dateFormat={serverSettings?.dateFormat ?? 'MM/dd/yyyy'}
                       timeFormat={serverSettings?.timeFormat ?? 'HH:mm'}
@@ -148,6 +166,8 @@ export default function AuthorClient({ author: authorProp }: AuthorClientProps) 
                       ereaderDevices={ereaderDevices}
                       showSubtitles={showSubtitles}
                       mediaProgress={mediaProgress}
+                      shelfEntities={seriesItems}
+                      entityIndex={entityIndex}
                     />
                   </div>
                 )

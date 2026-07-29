@@ -17,9 +17,11 @@ function getActionLink(task: Task): string {
 
   switch (task.action) {
     case 'download-podcast-episode':
-      return libraryId ? `/library/${libraryId}/podcast/download-queue` : ''
+      return libraryId ? `/library/${libraryId}/download-queue` : ''
     case 'encode-m4b':
+      return libraryId && libraryItemId ? `/library/${libraryId}/item/${libraryItemId}/tools?tool=m4b` : ''
     case 'embed-metadata':
+      return libraryId && libraryItemId ? `/library/${libraryId}/item/${libraryItemId}/tools?tool=embed` : ''
     case 'scan-item':
       return libraryId && libraryItemId ? `/library/${libraryId}/item/${libraryItemId}` : ''
     default:
@@ -56,7 +58,7 @@ export default function NotificationWidget({ className = '' }: NotificationWidge
     setShowMenu(false)
   }, [])
 
-  useClickOutside(menuRef, triggerRef, closeMenu)
+  useClickOutside(menuRef, triggerRef, closeMenu, true)
 
   const clickShowMenu = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -89,20 +91,20 @@ export default function NotificationWidget({ className = '' }: NotificationWidge
       <button
         ref={triggerRef}
         type="button"
-        className="text-foreground hover:text-foreground/80 relative flex h-10 w-10 cursor-pointer items-center justify-center"
+        className="text-foreground hover:text-foreground/80 relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center md:h-10 md:w-10"
         aria-haspopup="listbox"
         aria-expanded={showMenu}
         onClick={clickShowMenu}
       >
         {tasksRunning ? (
-          <Tooltip text={t('LabelTasks')} position="bottom" className="flex items-center">
+          <Tooltip text={t('LabelTasks')} position="bottom">
             <span className="relative">
               <LoadingSpinner className="scale-110 !cursor-pointer" />
               {showUnseenSuccessIndicator && <span className="bg-success pointer-events-none absolute -top-1 -right-0.5 h-2 w-2 rounded-full" />}
             </span>
           </Tooltip>
         ) : (
-          <Tooltip text={t('LabelActivities')} position="bottom" className="flex items-center">
+          <Tooltip text={t('LabelActivities')} position="bottom">
             <span className="relative">
               <span className="material-symbols text-xl" aria-label={t('LabelActivities')} role="button">
                 notifications

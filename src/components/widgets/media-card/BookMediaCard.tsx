@@ -1,6 +1,6 @@
 'use client'
 
-import type { BookMedia } from '@/types/api'
+import { type BookMedia, isPersonalizedSeriesRef } from '@/types/api'
 import { useMemo } from 'react'
 import MediaCard, { type MediaCardProps } from './MediaCard'
 
@@ -13,9 +13,13 @@ export default function BookMediaCard(props: BookMediaCardProps) {
   const { libraryItem } = props
   const media = libraryItem.media as BookMedia
 
+  // Sequence badge only when the server injects a shelf `PersonalizedSeriesRef`
+  // (continue-series, series-filtered rows). Minified home shelves use `seriesName` only;
+  // expanded `Series[]` from socket updates must not drive this badge.
   const seriesSequence = useMemo(() => {
-    const metadata = media.metadata
-    return metadata.series?.[0]?.sequence || null
+    const { series } = media.metadata
+    if (!series || !isPersonalizedSeriesRef(series)) return null
+    return series.sequence ?? null
   }, [media.metadata])
 
   const ebookFormat = useMemo(() => media.ebookFormat, [media])
@@ -27,7 +31,7 @@ export default function BookMediaCard(props: BookMediaCardProps) {
         return (
           <div
             cy-id="seriesSequence"
-            className="shadow-modal-content absolute end-[0.375em] top-[0.375em] z-10 rounded-lg bg-black/90"
+            className="shadow-modal-content absolute end-[0.375em] top-[0.375em] z-10 rounded-lg bg-black/90 text-white"
             style={{ padding: '0.1em 0.25em' }}
           >
             <p style={{ fontSize: '0.8em' }}>#{seriesSequence}</p>
