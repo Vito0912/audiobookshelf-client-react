@@ -1,5 +1,7 @@
 import { downloadPodcastEpisodesAction } from '@/app/actions/mediaActions'
 import Modal from '@/components/modals/Modal'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Btn from '@/components/ui/Btn'
 import Checkbox from '@/components/ui/Checkbox'
 import TextInput from '@/components/ui/TextInput'
@@ -280,11 +282,7 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      outerContent={
-        <div className="pointer-events-none absolute top-0 left-0 w-2/3 overflow-hidden p-5">
-          <p className="truncate text-3xl text-white drop-shadow-md">{libraryItem.media.metadata.title}</p>
-        </div>
-      }
+      outerContent={<ModalOuterContent title={libraryItem.media.metadata.title}>{libraryItem.media.metadata.title}</ModalOuterContent>}
       style={{ maxWidth: 1200 }}
     >
       <div className="flex h-[80vh] min-h-[400px] flex-col px-4 sm:px-6">
@@ -325,8 +323,9 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
               bgClass = 'bg-success/10'
             }
 
-            const publishedString = episode.publishedAt ? format.relativeTime(new Date(episode.publishedAt), { now: new Date() }) : t('LabelUnknown')
-            const publishedLabel = t('LabelPublished', { 0: publishedString })
+            const publishedLabel = episode.publishedAt
+              ? t('LabelPublished', { 0: format.relativeTime(new Date(episode.publishedAt), { now: new Date() }) })
+              : t('LabelUnknownPublishDate')
 
             return (
               <div
@@ -374,14 +373,10 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
                   <div className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 ${subTextClass}`}>
                     <p className="w-40 text-xs">{publishedLabel}</p>
                     {episode.durationSeconds != null && episode.durationSeconds > 0 && (
-                      <p className="min-w-28 text-xs">
-                        {t('LabelDuration')}: {formatDuration(episode.durationSeconds, t)}
-                      </p>
+                      <p className="min-w-28 text-xs">{t('LabelDurationWithValue', { 0: formatDuration(episode.durationSeconds, t) })}</p>
                     )}
                     {episode.enclosure?.length && !isNaN(Number(episode.enclosure.length)) && Number(episode.enclosure.length) > 0 && (
-                      <p className="text-xs">
-                        {t('LabelSize')}: {bytesPretty(Number(episode.enclosure.length))}
-                      </p>
+                      <p className="text-xs">{t('LabelSizeWithValue', { 0: bytesPretty(Number(episode.enclosure.length)) })}</p>
                     )}
                   </div>
                 </div>
@@ -390,18 +385,19 @@ export default function EpisodeFeedModal({ isOpen, onClose, libraryItem, episode
           })}
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 py-4">
-          {!allDownloaded ? (
-            <>
-              <Checkbox value={selectAll} onChange={toggleSelectAll} label={selectAllLabel} size="small" labelClass="whitespace-nowrap" />
-              <Btn className="shrink-0 whitespace-nowrap" disabled={selectedEpisodes.size === 0 || isPending} onClick={handleSubmit} size="small">
-                {buttonText}
-              </Btn>
-            </>
-          ) : (
-            <p className="text-success px-2 py-4 text-base">{t('LabelAllEpisodesDownloaded')}</p>
-          )}
-        </div>
+        {allDownloaded ? (
+          <ModalFooter start={<p className="text-success text-base">{t('LabelAllEpisodesDownloaded')}</p>} />
+        ) : (
+          <ModalFooter
+            start={<Checkbox value={selectAll} onChange={toggleSelectAll} label={selectAllLabel} labelClass="whitespace-nowrap" />}
+            primary={{
+              label: buttonText,
+              onClick: handleSubmit,
+              disabled: selectedEpisodes.size === 0 || isPending,
+              className: 'shrink-0 whitespace-nowrap'
+            }}
+          />
+        )}
       </div>
     </Modal>
   )

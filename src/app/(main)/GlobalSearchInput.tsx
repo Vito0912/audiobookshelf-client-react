@@ -8,12 +8,11 @@ import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 
 import { FlatResultItem, useGlobalSearchTransformer } from '@/hooks/useGlobalSearchTransformer'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type Ref } from 'react'
 import GlobalSearchMenu from './GlobalSearchMenu'
 
 interface GlobalSearchInputProps {
   libraryId?: string
-  autoFocus?: boolean
   onSubmit?: () => void
   /** Optional callback for when an item is selected. If provided, items become selectable instead of navigating. */
   onItemSelect?: (item: FlatResultItem) => void
@@ -21,9 +20,10 @@ interface GlobalSearchInputProps {
   onClear?: () => void
   /** Use portal to render the dropdown menu. Useful for avoiding clipping issues. */
   usePortal?: boolean
+  ref?: Ref<HTMLInputElement>
 }
 
-export default function GlobalSearchInput({ libraryId, autoFocus, onSubmit, onItemSelect, onClear, usePortal = false }: GlobalSearchInputProps = {}) {
+export default function GlobalSearchInput({ libraryId, onSubmit, onItemSelect, onClear, usePortal = false, ref }: GlobalSearchInputProps) {
   const searchOptions = useMemo(() => ({ autoSelectFirst: false, libraryId }), [libraryId])
   const { searchQuery, setSearchQuery, isSearching, searchResults, selectedLibraryId, handleSearch, searchError, clearSelection } =
     useLibrarySearch(searchOptions)
@@ -35,7 +35,12 @@ export default function GlobalSearchInput({ libraryId, autoFocus, onSubmit, onIt
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const [isTyping, setIsTyping] = useState(false) // Local typing state for "Thinking..."
 
-  // Debounce search
+  const onSearch = useEffectEvent(() => {
+    handleSearch()
+  })
+
+  // Debounce on the query only. handleSearch is an event — including it re-fires
+  // search when the callback identity changes (e.g. extras cache updates).
   useEffect(() => {
     if (!searchQuery) {
       setIsTyping(false)
@@ -45,15 +50,27 @@ export default function GlobalSearchInput({ libraryId, autoFocus, onSubmit, onIt
     setIsTyping(true)
     const timeoutId = setTimeout(() => {
       setIsTyping(false)
-      handleSearch()
+      onSearch()
     }, 500) // 500ms debounce
 
     return () => clearTimeout(timeoutId)
-  }, [searchQuery, handleSearch])
+  }, [searchQuery])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  const setInputRef = useCallback(
+    (node: HTMLInputElement | null) => {
+      inputRef.current = node
+      if (typeof ref === 'function') {
+        ref(node)
+      } else if (ref) {
+        ref.current = node
+      }
+    },
+    [ref]
+  )
 
   // Close menu when clicking outside
   useClickOutside(
@@ -157,7 +174,7 @@ export default function GlobalSearchInput({ libraryId, autoFocus, onSubmit, onIt
     <div className="relative w-full" ref={containerRef}>
       <InputWrapper size="small" className="w-full" inputRef={inputRef}>
         <input
-          ref={inputRef}
+          ref={setInputRef}
           type="text"
           className="h-full w-full bg-transparent text-sm outline-none placeholder:text-gray-400"
           placeholder={t('PlaceholderSearch')}
@@ -176,7 +193,6 @@ export default function GlobalSearchInput({ libraryId, autoFocus, onSubmit, onIt
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck="false"
-          autoFocus={autoFocus}
         />
       </InputWrapper>
 
@@ -185,7 +201,7 @@ export default function GlobalSearchInput({ libraryId, autoFocus, onSubmit, onIt
         {isSearching || isTyping ? (
           <LoadingSpinner size="la-sm" className="scale-50 text-gray-400" />
         ) : searchQuery ? (
-          <button onClick={handleClear} className="cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Clear search">
+          <button onClick={handleClear} className="cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label={t('ButtonClear')}>
             <span className="material-symbols text-lg" aria-hidden="true">
               close
             </span>

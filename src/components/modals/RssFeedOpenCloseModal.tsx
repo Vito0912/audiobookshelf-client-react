@@ -2,12 +2,14 @@
 
 import { closeRssFeed, openEntityRssFeed } from '@/app/actions/rssFeedActions'
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Checkbox from '@/components/ui/Checkbox'
 import TextInput from '@/components/ui/TextInput'
 import { useGlobalToast } from '@/contexts/ToastContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { getBasePath, withBasePath } from '@/lib/basePath'
 import { RssFeed } from '@/types/api'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -53,7 +55,7 @@ export default function RssFeedOpenCloseModal({ isOpen, onClose, entity, viewMod
   const entityFeed = entity?.feed ?? null
   const hasEpisodesWithoutPubDate = entity?.hasEpisodesWithoutPubDate ?? false
   const isHttp = typeof window !== 'undefined' && window.location.origin.startsWith('http://')
-  const demoFeedUrl = typeof window !== 'undefined' ? `${window.location.origin}/feed/${newFeedSlug || entityId}` : ''
+  const demoFeedUrl = typeof window !== 'undefined' ? `${window.location.origin}${withBasePath(`/feed/${newFeedSlug || entityId}`)}` : ''
 
   useEffect(() => {
     if (isOpen && entity) {
@@ -77,12 +79,14 @@ export default function RssFeedOpenCloseModal({ isOpen, onClose, entity, viewMod
     setProcessing(true)
     try {
       const res = await openEntityRssFeed(entity.type, entityId, {
-        serverAddress: window.location.origin,
+        // The server stores this verbatim and builds absolute feed urls from it, so it has to
+        // carry the base path the listener will use.
+        serverAddress: `${window.location.origin}${getBasePath()}`,
         slug: sanitized,
         metadataDetails: {
           preventIndexing: metadataDetails.preventIndexing,
-          ownerName: metadataDetails.ownerName || '',
-          ownerEmail: metadataDetails.ownerEmail || ''
+          ownerName: metadataDetails.ownerName.trim(),
+          ownerEmail: metadataDetails.ownerEmail.trim()
         }
       })
       setCurrentFeed(res.feed)
@@ -115,119 +119,121 @@ export default function RssFeedOpenCloseModal({ isOpen, onClose, entity, viewMod
 
   if (!entity) return null
 
-  const outerContent = (
-    <div className="absolute start-0 top-0 p-4">
-      <p className="max-w-[calc(100vw-4rem)] truncate text-xl font-semibold text-white" title={entityName}>
-        {entityName}
-      </p>
-    </div>
-  )
+  const outerContent = <ModalOuterContent title={entityName}>{entityName}</ModalOuterContent>
 
-  const fullFeedUrl = typeof window !== 'undefined' && currentFeed ? `${window.location.origin}${currentFeed.feedUrl}` : ''
+  const fullFeedUrl = typeof window !== 'undefined' && currentFeed ? `${window.location.origin}${withBasePath(currentFeed.feedUrl)}` : ''
   const meta = currentFeed?.meta
   const hasOwnerName = meta && meta.ownerName != null && String(meta.ownerName).trim() !== ''
   const hasOwnerEmail = meta && meta.ownerEmail != null && String(meta.ownerEmail).trim() !== ''
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} outerContent={outerContent} processing={processing}>
-      <div className="px-4 py-6 text-sm sm:px-6">
-        {currentFeed ? (
-          <>
-            <p className="mb-4 text-lg font-semibold">{viewMode ? t('HeaderRSSDetails') : t('HeaderRSSFeedIsOpen')}</p>
-            <TextInput value={fullFeedUrl} readOnly showCopy className="text-sm" />
-            {meta && (
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center">
-                  <span className="text-foreground-subdued w-48 shrink-0 text-xs uppercase">{t('LabelPreventIndexingShort')}</span>
-                  <span className="text-foreground">{meta.preventIndexing ? 'Yes' : 'No'}</span>
+      <div className="flex max-h-[90vh] flex-col">
+        <div className="overflow-y-auto px-4 py-6 text-sm sm:px-6">
+          {currentFeed ? (
+            <>
+              <p className="mb-4 text-lg font-semibold">{viewMode ? t('HeaderRSSDetails') : t('HeaderRSSFeedIsOpen')}</p>
+              <TextInput value={fullFeedUrl} readOnly showCopy className="text-sm" />
+              {meta && (
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center">
+                    <span className="text-foreground-subdued w-48 shrink-0 text-xs uppercase">{t('LabelPreventIndexingShort')}</span>
+                    <span className="text-foreground">{meta.preventIndexing ? 'Yes' : 'No'}</span>
+                  </div>
+                  {hasOwnerName && (
+                    <div className="flex items-center">
+                      <span className="text-foreground-subdued w-48 shrink-0 text-xs uppercase">{t('LabelRSSFeedCustomOwnerName')}</span>
+                      <span className="text-foreground">{meta.ownerName}</span>
+                    </div>
+                  )}
+                  {hasOwnerEmail && (
+                    <div className="flex items-center">
+                      <span className="text-foreground-subdued w-48 shrink-0 text-xs uppercase">{t('LabelRSSFeedCustomOwnerEmail')}</span>
+                      <span className="text-foreground">{meta.ownerEmail}</span>
+                    </div>
+                  )}
                 </div>
-                {hasOwnerName && (
-                  <div className="flex items-center">
-                    <span className="text-foreground-subdued w-48 shrink-0 text-xs uppercase">{t('LabelRSSFeedCustomOwnerName')}</span>
-                    <span className="text-foreground">{meta.ownerName}</span>
-                  </div>
-                )}
-                {hasOwnerEmail && (
-                  <div className="flex items-center">
-                    <span className="text-foreground-subdued w-48 shrink-0 text-xs uppercase">{t('LabelRSSFeedCustomOwnerEmail')}</span>
-                    <span className="text-foreground">{meta.ownerEmail}</span>
-                  </div>
-                )}
-              </div>
-            )}
-            {viewMode && (
-              <>
-                {currentFeed.episodes && currentFeed.episodes.length > 0 ? (
-                  <div className="border-border mt-6 max-h-[300px] overflow-y-auto rounded-md border">
-                    <table className="w-full border-collapse text-sm">
-                      <thead className="bg-table-header-bg sticky top-0">
-                        <tr className="border-border border-b">
-                          <th className="text-foreground-muted px-2 py-2 text-start text-xs font-semibold">{t('LabelEpisodeTitle')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentFeed.episodes.map((episode, index) => (
-                          <tr key={episode.id} className={`border-border border-b last:border-b-0 ${index % 2 === 1 ? 'bg-table-row-bg-even' : ''}`}>
-                            <td className="text-foreground px-2 py-2 text-sm">{episode.title}</td>
+              )}
+              {viewMode && (
+                <>
+                  {currentFeed.episodes && currentFeed.episodes.length > 0 ? (
+                    <div className="border-border mt-6 max-h-[300px] overflow-y-auto rounded-md border">
+                      <table className="w-full border-collapse text-sm">
+                        <thead className="bg-table-header-bg sticky top-0">
+                          <tr className="border-border border-b">
+                            <th className="text-foreground-muted px-2 py-2 text-start text-xs font-semibold">{t('LabelEpisodeTitle')}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-foreground-muted mt-6 text-sm">{t('MessageNoEpisodes')}</div>
-                )}
-              </>
-            )}
-            {userIsAdminOrUp && !viewMode && (
-              <div className="flex justify-end pt-4">
-                <Btn color="bg-error" size="small" onClick={handleCloseFeed} disabled={processing}>
-                  {t('ButtonCloseFeed')}
-                </Btn>
+                        </thead>
+                        <tbody>
+                          {currentFeed.episodes.map((episode, index) => (
+                            <tr key={episode.id} className={`border-border border-b last:border-b-0 ${index % 2 === 1 ? 'bg-table-row-bg-even' : ''}`}>
+                              <td className="text-foreground px-2 py-2 text-sm">{episode.title}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-foreground-muted mt-6 text-sm">{t('MessageNoEpisodes')}</div>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="mb-4 text-lg font-semibold">{t('HeaderOpenRSSFeed')}</p>
+              <div className="mb-2 space-y-2">
+                <label className="text-foreground-subdued block text-xs uppercase">{t('LabelRSSFeedSlug')}</label>
+                <TextInput value={newFeedSlug} onChange={(value) => setNewFeedSlug(value)} className="text-sm" trimWhitespace />
+                <p className="text-foreground-muted text-xs">{t('MessageFeedURLWillBe', { 0: demoFeedUrl })}</p>
               </div>
-            )}
-          </>
-        ) : (
-          <>
-            <p className="mb-4 text-lg font-semibold">{t('HeaderOpenRSSFeed')}</p>
-            <div className="mb-2 space-y-2">
-              <label className="text-foreground-subdued block text-xs uppercase">{t('LabelRSSFeedSlug')}</label>
-              <TextInput value={newFeedSlug} onChange={(value) => setNewFeedSlug(value)} className="text-sm" />
-              <p className="text-foreground-muted text-xs">{t('MessageFeedURLWillBe', { 0: demoFeedUrl })}</p>
-            </div>
-            <div className="space-y-3 py-2">
-              <Checkbox
-                value={metadataDetails.preventIndexing}
-                onChange={(checked) => setMetadataDetails((prev) => ({ ...prev, preventIndexing: checked }))}
-                label={t('LabelPreventIndexing')}
-              />
-              <div>
-                <label className="text-foreground-subdued mb-1 block text-xs uppercase">{t('LabelRSSFeedCustomOwnerName')}</label>
-                <TextInput
-                  value={metadataDetails.ownerName}
-                  onChange={(value) => setMetadataDetails((prev) => ({ ...prev, ownerName: value }))}
-                  className="text-sm"
+              <div className="space-y-3 py-2">
+                <Checkbox
+                  value={metadataDetails.preventIndexing}
+                  onChange={(checked) => setMetadataDetails((prev) => ({ ...prev, preventIndexing: checked }))}
+                  label={t('LabelPreventIndexing')}
                 />
+                <div>
+                  <label className="text-foreground-subdued mb-1 block text-xs uppercase">{t('LabelRSSFeedCustomOwnerName')}</label>
+                  <TextInput
+                    value={metadataDetails.ownerName}
+                    onChange={(value) => setMetadataDetails((prev) => ({ ...prev, ownerName: value }))}
+                    className="text-sm"
+                    trimWhitespace
+                  />
+                </div>
+                <div>
+                  <label className="text-foreground-subdued mb-1 block text-xs uppercase">{t('LabelRSSFeedCustomOwnerEmail')}</label>
+                  <TextInput
+                    value={metadataDetails.ownerEmail}
+                    onChange={(value) => setMetadataDetails((prev) => ({ ...prev, ownerEmail: value }))}
+                    className="text-sm"
+                    trimWhitespace
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-foreground-subdued mb-1 block text-xs uppercase">{t('LabelRSSFeedCustomOwnerEmail')}</label>
-                <TextInput
-                  value={metadataDetails.ownerEmail}
-                  onChange={(value) => setMetadataDetails((prev) => ({ ...prev, ownerEmail: value }))}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-            {isHttp && <p className="text-warning pt-2 text-xs">{t('NoteRSSFeedPodcastAppsHttps')}</p>}
-            {hasEpisodesWithoutPubDate && <p className="text-warning pt-2 text-xs">{t('NoteRSSFeedPodcastAppsPubDate')}</p>}
-            {userIsAdminOrUp && (
-              <div className="flex justify-end pt-6">
-                <Btn color="bg-success" size="small" onClick={handleOpenFeed} disabled={processing}>
-                  {t('ButtonOpenFeed')}
-                </Btn>
-              </div>
-            )}
-          </>
+              {isHttp && <p className="text-warning pt-2 text-xs">{t('NoteRSSFeedPodcastAppsHttps')}</p>}
+              {hasEpisodesWithoutPubDate && <p className="text-warning pt-2 text-xs">{t('NoteRSSFeedPodcastAppsPubDate')}</p>}
+            </>
+          )}
+        </div>
+        {userIsAdminOrUp && !viewMode && currentFeed && (
+          <ModalFooter
+            destructive={{
+              label: t('ButtonCloseFeed'),
+              onClick: handleCloseFeed,
+              disabled: processing
+            }}
+          />
+        )}
+        {userIsAdminOrUp && !currentFeed && (
+          <ModalFooter
+            primary={{
+              label: t('ButtonOpenFeed'),
+              onClick: handleOpenFeed,
+              disabled: processing
+            }}
+          />
         )}
       </div>
     </Modal>

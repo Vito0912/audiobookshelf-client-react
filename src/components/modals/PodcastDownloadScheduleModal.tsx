@@ -2,7 +2,8 @@
 
 import { updateLibraryItemMediaAction } from '@/app/actions/mediaActions'
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import HelpTooltipIcon from '@/components/ui/HelpTooltipIcon'
 import TextInput from '@/components/ui/TextInput'
 import Alert from '@/components/widgets/Alert'
@@ -180,11 +181,7 @@ export default function PodcastDownloadScheduleModal({ isOpen, onClose, libraryI
 
   const isProcessing = isSaving || isDisabling
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{t('HeaderScheduleEpisodeDownloads')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{t('HeaderScheduleEpisodeDownloads')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} processing={isProcessing} outerContent={outerContentTitle} className="w-full md:max-w-[700px] lg:max-w-[700px]">
@@ -221,20 +218,28 @@ export default function PodcastDownloadScheduleModal({ isOpen, onClose, libraryI
         </div>
 
         {(showScheduleForm || showDisableOnly) && (
-          <div className="border-border border-t px-4 py-3">
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-              {savedAutoDownloadEpisodes && (
-                <Btn color="bg-error" disabled={isProcessing} loading={isDisabling} onClick={handleDisable} className="sm:me-auto">
-                  {t('ButtonDisableAutoDownloadEpisodes')}
-                </Btn>
-              )}
-              {showScheduleForm && (
-                <Btn disabled={!isUpdated || !cronIsValid || isProcessing} loading={isSaving} onClick={handleSave}>
-                  {savedAutoDownloadEpisodes ? t('ButtonSave') : t('ButtonEnable')}
-                </Btn>
-              )}
-            </div>
-          </div>
+          <ModalFooter
+            destructive={
+              savedAutoDownloadEpisodes
+                ? {
+                    label: t('ButtonDisableAutoDownloadEpisodes'),
+                    onClick: handleDisable,
+                    disabled: isProcessing,
+                    loading: isDisabling
+                  }
+                : undefined
+            }
+            primary={
+              showScheduleForm
+                ? {
+                    label: savedAutoDownloadEpisodes ? t('ButtonSave') : t('ButtonEnable'),
+                    onClick: handleSave,
+                    disabled: !isUpdated || !cronIsValid || isProcessing,
+                    loading: isSaving
+                  }
+                : undefined
+            }
+          />
         )}
       </div>
     </Modal>

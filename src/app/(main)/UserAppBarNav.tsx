@@ -1,0 +1,305 @@
+'use client'
+
+// TODO: Move non-user-specific menu items (e.g. upload, components catalog) out of this component and its menu builder.
+
+import ButtonBase from '@/components/ui/ButtonBase'
+import { useUser } from '@/contexts/UserContext'
+import { useClickOutside } from '@/hooks/useClickOutside'
+import { useLogout } from '@/hooks/useLogout'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { mergeClasses } from '@/lib/merge-classes'
+import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react-dom'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import AppBarNavMenuItem from './AppBarNavMenuItem'
+import { type AppBarNavMenuItemConfig, buildAppBarNavMenuItems } from './appBarNavMenuItems'
+
+export default function UserAppBarNav() {
+  const { user, userCanUpload } = useUser()
+  const username = user.username
+  const t = useTypeSafeTranslations()
+  const router = useRouter()
+  const logout = useLogout()
+  const isDesktop = useMediaQuery('md', true)
+  const menuId = useId()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [focusedIndex, setFocusedIndex] = useState(-1)
+  const [mounted, setMounted] = useState(false)
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const desktopTriggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const allMenuItems = useMemo(() => buildAppBarNavMenuItems({ username, userCanUpload, t }), [t, userCanUpload, username])
+
+  const visibleMenuItems = useMemo(() => (isDesktop ? allMenuItems.filter((item) => !item.mobileOnly) : allMenuItems), [allMenuItems, isDesktop])
+
+  const closeMenu = useCallback(
+    (restoreDesktopFocus = false) => {
+      setMenuOpen(false)
+      setFocusedIndex(-1)
+      if (restoreDesktopFocus && isDesktop) {
+        desktopTriggerRef.current?.focus()
+      }
+    },
+    [isDesktop]
+  )
+
+  const openMenu = useCallback(
+    (startIndex = 0) => {
+      setMenuOpen(true)
+      const clampedIndex = Math.max(0, Math.min(startIndex, visibleMenuItems.length - 1))
+      setFocusedIndex(clampedIndex)
+    },
+    [visibleMenuItems.length]
+  )
+
+  const toggleMenu = useCallback(() => {
+    if (menuOpen) {
+      closeMenu(isDesktop)
+    } else {
+      openMenu()
+    }
+  }, [closeMenu, isDesktop, menuOpen, openMenu])
+
+  const handleClickOutside = useCallback(() => {
+    closeMenu(false)
+  }, [closeMenu])
+
+  useClickOutside(menuRef, triggerRef, handleClickOutside, true)
+
+  const handleTriggerClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      toggleMenu()
+    },
+    [toggleMenu]
+  )
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout()
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      closeMenu()
+    }
+  }, [logout, closeMenu])
+
+  const activateMenuItem = useCallback(
+    (index: number) => {
+      const item = visibleMenuItems[index]
+      if (!item) return
+
+      if (item.type === 'logout') {
+        void handleLogout()
+        return
+      }
+
+      closeMenu(false)
+      if (item.href) {
+        router.push(item.href)
+      }
+    },
+    [closeMenu, handleLogout, router, visibleMenuItems]
+  )
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const middleware = useMemo(() => [offset(8), shift({ padding: 8 }), flip({ fallbackAxisSideDirection: 'start' })], [])
+
+  const { refs, floatingStyles, update } = useFloating({
+    open: menuOpen,
+    placement: 'bottom-end',
+    strategy: 'fixed',
+    middleware
+  })
+
+  useEffect(() => {
+    if (triggerRef.current) {
+      refs.setReference(triggerRef.current)
+    }
+  }, [refs])
+
+  useEffect(() => {
+    if (menuRef.current && menuOpen) {
+      refs.setFloating(menuRef.current)
+      update()
+    }
+  }, [refs, menuOpen, update])
+
+  useEffect(() => {
+    if (!menuOpen || !refs.reference.current || !refs.floating.current) {
+      return
+    }
+
+    return autoUpdate(refs.reference.current, refs.floating.current, update)
+  }, [menuOpen, refs, update])
+
+  const handleVerticalNavigation = useCallback(
+    (direction: 'up' | 'down') => {
+      if (!visibleMenuItems.length) return
+
+      if (direction === 'down') {
+        if (!menuOpen) {
+          openMenu(0)
+        } else {
+          setFocusedIndex((prev) => (prev < visibleMenuItems.length - 1 ? prev + 1 : prev))
+        }
+      } else if (!menuOpen) {
+        openMenu(visibleMenuItems.length - 1)
+      } else {
+        setFocusedIndex((prev) => (prev > 0 ? prev - 1 : prev))
+      }
+    },
+    [menuOpen, openMenu, visibleMenuItems.length]
+  )
+
+  const handleHomeEnd = useCallback(
+    (key: 'home' | 'end') => {
+      if (!menuOpen || !visibleMenuItems.length) return
+      setFocusedIndex(key === 'home' ? 0 : visibleMenuItems.length - 1)
+    },
+    [menuOpen, visibleMenuItems.length]
+  )
+
+  const handleTab = useCallback(() => {
+    if (menuOpen) {
+      closeMenu(false)
+    }
+  }, [closeMenu, menuOpen])
+
+  const handleDesktopTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        handleVerticalNavigation('down')
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        handleVerticalNavigation('up')
+        break
+      case 'Enter':
+      case ' ':
+        e.preventDefault()
+        if (!menuOpen) {
+          openMenu(0)
+        } else if (focusedIndex >= 0) {
+          activateMenuItem(focusedIndex)
+        }
+        break
+      case 'Escape':
+        if (menuOpen) {
+          e.preventDefault()
+          closeMenu(true)
+        }
+        break
+      case 'Home':
+        e.preventDefault()
+        handleHomeEnd('home')
+        break
+      case 'End':
+        e.preventDefault()
+        handleHomeEnd('end')
+        break
+      case 'Tab':
+        handleTab()
+        break
+      default:
+        break
+    }
+  }
+
+  const getItemClassName = (item: AppBarNavMenuItemConfig, index: number) =>
+    mergeClasses(
+      'hover:bg-dropdown-item-hover text-foreground flex w-full items-center justify-start px-4 py-3 transition-colors outline-none',
+      item.className,
+      item.mobileOnly && 'md:hidden',
+      focusedIndex === index && 'bg-dropdown-item-selected'
+    )
+
+  const menuContent = (
+    <nav id={menuId} role="menu" className="flex flex-col py-1" onClick={(e) => e.stopPropagation()}>
+      {visibleMenuItems.map((item, index) => (
+        <AppBarNavMenuItem
+          key={item.id}
+          id={`${menuId}-item-${item.id}`}
+          tabIndex={isDesktop ? -1 : undefined}
+          className={getItemClassName(item, index)}
+          ariaLabel={item.ariaLabel}
+          icon={item.icon}
+          label={item.label}
+          href={item.type === 'link' ? item.href : undefined}
+          onClick={() => activateMenuItem(index)}
+        />
+      ))}
+    </nav>
+  )
+
+  const activeDescendantId =
+    menuOpen && focusedIndex >= 0 && focusedIndex < visibleMenuItems.length ? `${menuId}-item-${visibleMenuItems[focusedIndex].id}` : undefined
+
+  return (
+    <>
+      <div ref={triggerRef} className="relative shrink-0">
+        {/* Desktop - Username Dropdown */}
+        <ButtonBase
+          ref={desktopTriggerRef}
+          size="small"
+          ariaLabel={t('AriaLabelAccountMenu')}
+          aria-expanded={menuOpen}
+          aria-controls={menuId}
+          aria-haspopup="menu"
+          aria-activedescendant={activeDescendantId}
+          className="text-button-foreground hidden min-w-24 justify-between px-4 py-1 ps-3 pe-2 text-sm md:inline-flex"
+          onClick={handleTriggerClick}
+          onKeyDown={handleDesktopTriggerKeyDown}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <span className="block truncate text-sm">{username}</span>
+          <span className="material-symbols text-xl" aria-hidden="true">
+            person
+          </span>
+        </ButtonBase>
+
+        {/* Mobile - Account icon button */}
+        <ButtonBase
+          size="small"
+          ariaLabel={t('AriaLabelAccountMenu')}
+          aria-expanded={menuOpen}
+          aria-controls={menuId}
+          aria-haspopup="menu"
+          aria-activedescendant={activeDescendantId}
+          className="text-button-foreground inline-flex w-9 px-0 md:hidden"
+          onClick={handleTriggerClick}
+          onKeyDown={handleDesktopTriggerKeyDown}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <span className="material-symbols text-xl" aria-hidden="true">
+            person
+          </span>
+        </ButtonBase>
+      </div>
+
+      {menuOpen &&
+        mounted &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="bg-primary border-border z-[9999] min-w-[200px] rounded-md border shadow-lg"
+            style={floatingStyles}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {menuContent}
+          </div>,
+          document.body
+        )}
+    </>
+  )
+}

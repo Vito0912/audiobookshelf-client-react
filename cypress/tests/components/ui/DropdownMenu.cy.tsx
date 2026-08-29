@@ -1,4 +1,5 @@
 import DropdownMenu from '@/components/ui/DropdownMenu'
+import LibraryIcon from '@/components/ui/LibraryIcon'
 import React from 'react'
 
 // Define types for the dropdown menu items based on the component's interface
@@ -6,6 +7,7 @@ interface DropdownMenuItem {
   text: string
   value: string | number
   subtext?: string
+  leftIcon?: React.ReactNode
 }
 
 describe('<DropdownMenu />', () => {
@@ -289,6 +291,19 @@ describe('<DropdownMenu />', () => {
     })
   })
 
+  describe('leftIcon', () => {
+    it('renders leftIcon before item text', () => {
+      const itemsWithIcons: DropdownMenuItem[] = [
+        { text: 'Books', value: 'books', leftIcon: <LibraryIcon icon="books-1" decorative /> },
+        { text: 'Podcasts', value: 'podcasts', leftIcon: <LibraryIcon icon="podcast" decorative /> }
+      ]
+      cy.mount(<DropdownMenu {...defaultProps} items={itemsWithIcons} />)
+      cy.get('[role="listbox"] > li').eq(0).find('[cy-id="library-icon-span"]').should('have.class', 'icon-books-1')
+      cy.get('[role="listbox"] > li').eq(0).should('contain.text', 'Books')
+      cy.get('[role="listbox"] > li').eq(1).find('[cy-id="library-icon-span"]').should('have.class', 'icon-podcast')
+    })
+  })
+
   describe('Edge Cases', () => {
     it('handles items with special characters in text', () => {
       const specialItems: DropdownMenuItem[] = [
@@ -312,6 +327,23 @@ describe('<DropdownMenu />', () => {
       cy.get('[role="listbox"] > li').eq(0).should('contain.text', 'This is a very long text')
       cy.get('[role="listbox"] > li').eq(1).should('contain.text', 'Short')
       cy.get('[role="listbox"] > li').eq(1).should('contain.text', 'This is a very long text')
+    })
+
+    it('wraps long text when wrapText is set', () => {
+      const longText = 'This is a very long text that should wrap onto multiple lines in the dropdown menu item instead of truncating with an ellipsis'
+      const longItems: DropdownMenuItem[] = [{ text: longText, value: 'long1' }]
+      cy.mount(
+        <div className="w-48">
+          <DropdownMenu {...defaultProps} items={longItems} wrapText />
+        </div>
+      )
+      cy.get('[role="listbox"] > li')
+        .eq(0)
+        .find('span')
+        .first()
+        .should('have.class', 'line-clamp-2')
+        .and('have.class', 'break-words')
+        .and('not.have.class', 'truncate')
     })
   })
 })

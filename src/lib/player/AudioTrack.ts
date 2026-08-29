@@ -1,3 +1,4 @@
+import { withBasePath } from '@/lib/basePath'
 import type { AudioTrackData } from '@/types/api'
 
 /**
@@ -26,10 +27,14 @@ export class AudioTrack {
 
     this.sessionId = sessionId
 
-    if (this.contentUrl?.startsWith('/hls') || !sessionId) {
+    if (!sessionId) {
+      // Share pages: ShareController embeds RouterBasePath in contentUrl (Vue uses it as-is).
       this.sessionTrackUrl = this.contentUrl
+    } else if (this.contentUrl?.startsWith('/hls')) {
+      this.sessionTrackUrl = withBasePath(this.contentUrl)
     } else {
-      this.sessionTrackUrl = `/public/session/${sessionId}/track/${this.index}`
+      // Session track URLs are built client-side; prefix with the configured base path.
+      this.sessionTrackUrl = withBasePath(`/public/session/${sessionId}/track/${this.index}`)
     }
   }
 

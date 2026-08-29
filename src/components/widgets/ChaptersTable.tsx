@@ -1,21 +1,23 @@
 'use client'
 
-import Btn from '@/components/ui/Btn'
+import IconBtn from '@/components/ui/IconBtn'
 import SimpleDataTable from '@/components/ui/SimpleDataTable'
+import Tooltip from '@/components/ui/Tooltip'
 import CollapsibleSection from '@/components/widgets/CollapsibleSection'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { secondsToTimestamp } from '@/lib/datefns'
 import { BookLibraryItem, Chapter } from '@/types/api'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 
 interface ChaptersTableProps {
   libraryItem: BookLibraryItem
   keepOpen?: boolean
   expanded?: boolean
+  onEditChapters?: () => void
 }
 
-export default function ChaptersTable({ libraryItem, keepOpen = false, expanded: expandedProp = false }: ChaptersTableProps) {
+export default function ChaptersTable({ libraryItem, keepOpen = false, expanded: expandedProp = false, onEditChapters }: ChaptersTableProps) {
   const t = useTypeSafeTranslations()
   const { userCanUpdate } = useUser()
   const [expanded, setExpanded] = useState(expandedProp)
@@ -41,14 +43,14 @@ export default function ChaptersTable({ libraryItem, keepOpen = false, expanded:
     () => [
       {
         label: t('LabelTitle'),
-        accessor: 'title' as const,
-        headerClassName: 'text-start px-4',
-        cellClassName: 'px-4'
+        accessor: (row: Chapter) => <span className="break-words">{row.title}</span>,
+        headerClassName: 'min-w-0 px-2 text-start md:px-4',
+        cellClassName: 'max-w-0 min-w-0 px-2 md:px-4'
       },
       {
         label: t('LabelStart'),
-        headerClassName: 'text-center px-2',
-        cellClassName: 'text-center px-2',
+        headerClassName: 'w-20 min-w-20 px-2 text-center md:w-24 md:min-w-24',
+        cellClassName: 'w-20 min-w-20 px-2 text-center md:w-24 md:min-w-24',
         accessor: (row: Chapter) => (
           <div
             className="cursor-pointer text-center font-mono hover:underline"
@@ -73,33 +75,43 @@ export default function ChaptersTable({ libraryItem, keepOpen = false, expanded:
       },
       {
         label: t('LabelDuration'),
-        headerClassName: 'text-center px-2 w-16 md:w-24 min-w-16 md:min-w-24',
-        cellClassName: 'text-center px-2 font-mono',
-        accessor: (row: Chapter) => secondsToTimestamp(Math.max(0, row.end - row.start)),
-        hiddenBelow: 'md' as const
+        headerClassName: 'w-24 min-w-24 px-2 pe-3 text-center',
+        cellClassName: 'w-24 min-w-24 px-2 pe-3 text-center font-mono',
+        accessor: (row: Chapter) => secondsToTimestamp(Math.max(0, row.end - row.start))
       }
     ],
     [t, handleGoToTimestamp]
   )
 
-  const chaptersPath = `/library/${libraryItem.libraryId}/item/${libraryItem.id}/chapters`
+  const handleEditChapters = useCallback(
+    (e: MouseEvent) => {
+      e.stopPropagation()
+      onEditChapters?.()
+    },
+    [onEditChapters]
+  )
+
+  const chaptersActionLabel = isEmpty ? t('ButtonAddChapters') : t('ButtonEditChapters')
 
   const headerActions = useMemo(
     () =>
       userCanUpdate ? (
-        <Btn
-          to={chaptersPath}
-          color="bg-primary"
-          size="small"
-          className="me-2"
-          onClick={(e) => {
-            e.stopPropagation()
-          }}
-        >
-          {isEmpty ? t('ButtonAddChapters') : t('ButtonEditChapters')}
-        </Btn>
+        <Tooltip text={chaptersActionLabel} position="top">
+          <span className="me-2 inline-flex">
+            <IconBtn
+              size="small"
+              ariaLabel={chaptersActionLabel}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleEditChapters(e)
+              }}
+            >
+              {isEmpty ? 'add' : 'edit'}
+            </IconBtn>
+          </span>
+        </Tooltip>
       ) : null,
-    [userCanUpdate, chaptersPath, isEmpty, t]
+    [userCanUpdate, handleEditChapters, chaptersActionLabel, isEmpty]
   )
 
   if (isEmpty && !userCanUpdate) {
@@ -120,7 +132,7 @@ export default function ChaptersTable({ libraryItem, keepOpen = false, expanded:
           <p className="text-foreground-muted">{t('MessageNoChapters')}</p>
         </div>
       ) : (
-        <SimpleDataTable data={chapters} columns={columns} getRowKey={(row) => row.id} />
+        <SimpleDataTable data={chapters} columns={columns} getRowKey={(row) => row.id} tableClassName="table-fixed" />
       )}
     </CollapsibleSection>
   )

@@ -67,8 +67,10 @@ export interface ServerStatus {
   isInit: boolean
   authMethods: string[]
   authFormData: AuthFormData
-  ConfigPath: string
-  MetadataPath: string
+  /** Present only when the server has not been initialized yet */
+  ConfigPath?: string
+  /** Present only when the server has not been initialized yet */
+  MetadataPath?: string
   app: string
 }
 
@@ -222,6 +224,26 @@ export interface GetUsersResponse {
   users: User[]
 }
 
+export interface UserAccountPayload {
+  username: string
+  email?: string
+  password?: string
+  type: 'admin' | 'user' | 'guest'
+  isActive: boolean
+  permissions: UserPermissions
+  librariesAccessible: string[]
+  itemTagsSelected: string[]
+}
+
+export interface CreateUserResponse {
+  user: User
+}
+
+export interface UpdateUserResponse {
+  success: boolean
+  user: User & { accessToken?: string }
+}
+
 export interface LibraryFolder {
   id: string
   fullPath: string
@@ -242,6 +264,7 @@ export interface LibraryFilterData {
   publishers: string[]
   languages: string[]
   publishedDecades: string[]
+  numIssues?: number
 }
 
 // ============================================================================
@@ -864,6 +887,8 @@ export interface MediaProgress {
   mediaItemId?: string
   mediaItemType?: string
   userId?: string
+  coverPath?: string
+  mediaUpdatedAt?: number
 }
 
 export interface AudioBookmark {
@@ -1143,6 +1168,20 @@ export interface UserLoginResponse {
   Source: string
 }
 
+/** Login response when `x-return-tokens: true` is sent */
+export interface UserLoginWithTokensResponse extends UserLoginResponse {
+  user: User & { accessToken?: string; refreshToken?: string }
+}
+
+export interface UpdateServerSettingsResponse {
+  serverSettings: ServerSettings
+}
+
+/** Response from POST /logout on the Audiobookshelf server (and /internal-api/logout passthrough) */
+export interface ServerLogoutResponse {
+  redirect_url?: string | null
+}
+
 export interface ApiKey {
   createdAt: string
   createdByUser: {
@@ -1419,6 +1458,7 @@ export interface UpdateLibraryItemMediaPayload {
   url?: string
   autoDownloadEpisodes?: boolean
   autoDownloadSchedule?: string
+  lastEpisodeCheck?: number
   maxEpisodesToKeep?: number
   maxNewEpisodesToDownload?: number
 }

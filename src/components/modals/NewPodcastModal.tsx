@@ -2,7 +2,8 @@
 
 import { createPodcastAction } from '@/app/(main)/library/[library]/(podcast)/add-podcast/actions'
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Checkbox from '@/components/ui/Checkbox'
 import Dropdown, { DropdownItem } from '@/components/ui/Dropdown'
 import MultiSelect, { MultiSelectItem } from '@/components/ui/MultiSelect'
@@ -16,7 +17,7 @@ import { PodcastSearchResult, RssPodcast } from '@/types/api'
 import path from 'path'
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 
-interface NewPodcastFormState {
+interface NewPodcastCreateState {
   title: string
   author: string
   description: string
@@ -33,7 +34,7 @@ interface NewPodcastFormState {
   type: string
 }
 
-const emptyFormState = (): NewPodcastFormState => ({
+const emptyFormState = (): NewPodcastCreateState => ({
   title: '',
   author: '',
   description: '',
@@ -64,6 +65,16 @@ function parseExplicitFromFeed(explicit: string | undefined): boolean {
   return explicit === 'yes' || explicit === 'true'
 }
 
+function trimPodcastCreateState(podcast: NewPodcastCreateState): NewPodcastCreateState {
+  return {
+    ...podcast,
+    title: podcast.title.trim(),
+    author: podcast.author.trim(),
+    description: podcast.description.trim(),
+    language: podcast.language.trim()
+  }
+}
+
 export interface NewPodcastModalProps {
   isOpen: boolean
   podcastData: PodcastSearchResult | null
@@ -78,7 +89,7 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
   const { library } = useLibrary()
   const [isPending, startTransition] = useTransition()
 
-  const [podcast, setPodcast] = useState<NewPodcastFormState>(emptyFormState)
+  const [podcast, setPodcast] = useState<NewPodcastCreateState>(emptyFormState)
   const [selectedFolderId, setSelectedFolderId] = useState<string>('')
   const [fullPath, setFullPath] = useState('')
 
@@ -117,7 +128,7 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
     const feedMetadata = podcastFeedData?.metadata
     const genres = podcastData?.genres ? normalizeGenres(podcastData.genres) : feedMetadata?.categories || []
 
-    const next: NewPodcastFormState = {
+    const next: NewPodcastCreateState = {
       title: podcastData?.title || feedMetadata?.title || '',
       author: podcastData?.artistName || feedMetadata?.author || '',
       description: podcastData?.description || feedMetadata?.descriptionPlain || '',
@@ -178,32 +189,36 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
   }, [])
 
   const handleSubmit = useCallback(() => {
-    if (!fullPath || !selectedFolderId) {
+    const trimmedPodcast = trimPodcastCreateState(podcast)
+    const folder = library.folders?.find((f) => f.id === selectedFolderId)
+    const podcastPath = folder?.fullPath && trimmedPodcast.title ? path.join(folder.fullPath, sanitizeFileName(trimmedPodcast.title)) : fullPath
+
+    if (!podcastPath || !selectedFolderId) {
       showToast(t('ToastPodcastCreateFailed'), { type: 'error' })
       return
     }
 
     const podcastPayload = {
-      path: fullPath,
+      path: podcastPath,
       folderId: selectedFolderId,
       libraryId: library.id,
       media: {
         metadata: {
-          title: podcast.title,
-          author: podcast.author,
-          description: podcast.description,
-          releaseDate: podcast.releaseDate,
-          genres: [...podcast.genres],
-          feedUrl: podcast.feedUrl,
-          imageUrl: podcast.imageUrl,
-          itunesPageUrl: podcast.itunesPageUrl,
-          itunesId: podcast.itunesId,
-          itunesArtistId: podcast.itunesArtistId,
-          language: podcast.language,
-          explicit: podcast.explicit,
-          type: podcast.type
+          title: trimmedPodcast.title,
+          author: trimmedPodcast.author,
+          description: trimmedPodcast.description,
+          releaseDate: trimmedPodcast.releaseDate,
+          genres: [...trimmedPodcast.genres],
+          feedUrl: trimmedPodcast.feedUrl,
+          imageUrl: trimmedPodcast.imageUrl,
+          itunesPageUrl: trimmedPodcast.itunesPageUrl,
+          itunesId: trimmedPodcast.itunesId,
+          itunesArtistId: trimmedPodcast.itunesArtistId,
+          language: trimmedPodcast.language,
+          explicit: trimmedPodcast.explicit,
+          type: trimmedPodcast.type
         },
-        autoDownloadEpisodes: podcast.autoDownloadEpisodes
+        autoDownloadEpisodes: trimmedPodcast.autoDownloadEpisodes
       }
     }
 
@@ -219,15 +234,9 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
         showToast(message, { type: 'error' })
       }
     })
-  }, [fullPath, library.id, onClose, onCreated, podcast, selectedFolderId, showToast, t])
+  }, [fullPath, library.folders, library.id, onClose, onCreated, podcast, selectedFolderId, showToast, t])
 
-  const outerContent = (
-    <div className="absolute start-0 top-0 max-w-[75%] p-4">
-      <h2 className="truncate text-xl text-white">{modalTitle}</h2>
-    </div>
-  )
-
-  const pathLabel = `${t('LabelPodcast')} ${t('LabelPath')}`
+  const outerContent = <ModalOuterContent title={modalTitle}>{modalTitle}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} processing={isPending} outerContent={outerContent}>
@@ -241,8 +250,8 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
           ) : null}
 
           <div className="grid gap-2 md:grid-cols-2">
-            <TextInput label={t('LabelTitle')} value={podcast.title} onChange={handleTitleChange} />
-            <TextInput label={t('LabelAuthor')} value={podcast.author} onChange={(author) => setPodcast((prev) => ({ ...prev, author }))} />
+            <TextInput label={t('LabelTitle')} value={podcast.title} onChange={handleTitleChange} trimWhitespace />
+            <TextInput label={t('LabelAuthor')} value={podcast.author} onChange={(author) => setPodcast((prev) => ({ ...prev, author }))} trimWhitespace />
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
@@ -265,7 +274,12 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
               className="w-full"
               onChange={(type) => setPodcast((prev) => ({ ...prev, type: String(type) }))}
             />
-            <TextInput label={t('LabelLanguage')} value={podcast.language} onChange={(language) => setPodcast((prev) => ({ ...prev, language }))} />
+            <TextInput
+              label={t('LabelLanguage')}
+              value={podcast.language}
+              onChange={(language) => setPodcast((prev) => ({ ...prev, language }))}
+              trimWhitespace
+            />
             <div className="flex items-end">
               <Checkbox
                 value={podcast.explicit}
@@ -282,27 +296,31 @@ export default function NewPodcastModal({ isOpen, podcastData, podcastFeedData, 
             value={podcast.description}
             rows={3}
             onChange={(description) => setPodcast((prev) => ({ ...prev, description }))}
+            trimWhitespace
           />
 
           <div className="grid gap-2 md:grid-cols-2">
             <Dropdown label={t('LabelFolder')} value={selectedFolderId} items={folderItems} disabled={isPending} onChange={handleFolderChange} />
-            <TextInput label={pathLabel} value={fullPath} readOnly customInputClass="truncate" />
+            <TextInput label={t('LabelPath')} value={fullPath} readOnly customInputClass="truncate" />
           </div>
         </div>
 
-        <div className="border-border border-t px-4 py-3 sm:px-6">
-          <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-4">
+        <ModalFooter
+          start={
             <Checkbox
               value={podcast.autoDownloadEpisodes}
               onChange={(autoDownloadEpisodes) => setPodcast((prev) => ({ ...prev, autoDownloadEpisodes }))}
               label={t('LabelAutoDownloadEpisodes')}
               checkboxBgClass="bg-primary"
             />
-            <Btn disabled={isPending} loading={isPending} onClick={handleSubmit}>
-              {t('ButtonSubmit')}
-            </Btn>
-          </div>
-        </div>
+          }
+          primary={{
+            label: t('ButtonSubmit'),
+            onClick: handleSubmit,
+            disabled: isPending,
+            loading: isPending
+          }}
+        />
       </div>
     </Modal>
   )

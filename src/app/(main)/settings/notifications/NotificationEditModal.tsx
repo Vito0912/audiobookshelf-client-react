@@ -1,7 +1,8 @@
 'use client'
 
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Dropdown, { DropdownItem } from '@/components/ui/Dropdown'
 import { MultiSelect } from '@/components/ui/MultiSelect'
 import TextareaInput from '@/components/ui/TextareaInput'
@@ -95,7 +96,12 @@ export default function NotificationEditModal({ isOpen, notification, notificati
 
     startTransition(async () => {
       try {
-        const updatedSettings = isEditing ? await updateNotification(formState.id!, formState) : await createNotification(formState)
+        const payload = {
+          ...formState,
+          titleTemplate: formState.titleTemplate.trim(),
+          bodyTemplate: formState.bodyTemplate.trim()
+        }
+        const updatedSettings = isEditing ? await updateNotification(payload.id!, payload) : await createNotification(payload)
         onSaved(updatedSettings)
         if (isEditing) {
           showToast(t('ToastNotificationUpdateSuccess'), { type: 'success' })
@@ -108,11 +114,7 @@ export default function NotificationEditModal({ isOpen, notification, notificati
     })
   }
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="truncate text-xl text-white">{isEditing ? t('HeaderNotificationUpdate') : t('HeaderNotificationCreate')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{isEditing ? t('HeaderNotificationUpdate') : t('HeaderNotificationCreate')}</ModalOuterContent>
 
   const urlItems = formState.urls.map((url) => ({ value: url, content: url }))
 
@@ -148,6 +150,7 @@ export default function NotificationEditModal({ isOpen, notification, notificati
             value={formState.titleTemplate}
             disabled={isPending}
             onChange={(value) => setFormState((prev) => ({ ...prev, titleTemplate: value }))}
+            trimWhitespace
           />
 
           <TextareaInput
@@ -156,29 +159,30 @@ export default function NotificationEditModal({ isOpen, notification, notificati
             rows={4}
             disabled={isPending}
             onChange={(value) => setFormState((prev) => ({ ...prev, bodyTemplate: value }))}
+            trimWhitespace
           />
 
           {selectedEvent?.variables?.length ? (
-            <p className="text-foreground-muted text-sm">
-              <strong>{t('LabelNotificationAvailableVariables')}:</strong> {selectedEvent.variables.join(', ')}
-            </p>
+            <p className="text-foreground-muted text-sm">{t('LabelNotificationAvailableVariablesWithValue', { 0: selectedEvent.variables.join(', ') })}</p>
           ) : null}
         </div>
 
-        {/* Footer */}
-        <div className="border-border border-t px-4 py-3 sm:px-6">
-          <div className="flex justify-between">
+        <ModalFooter
+          start={
             <SettingsToggleSwitch
               label={t('LabelEnable')}
               value={formState.enabled}
               disabled={isPending}
               onChange={(enabled) => setFormState((prev) => ({ ...prev, enabled }))}
             />
-            <Btn loading={isPending} disabled={isPending} onClick={handleSubmit}>
-              {t('ButtonSubmit')}
-            </Btn>
-          </div>
-        </div>
+          }
+          primary={{
+            label: t('ButtonSubmit'),
+            onClick: handleSubmit,
+            loading: isPending,
+            disabled: isPending
+          }}
+        />
       </div>
     </Modal>
   )

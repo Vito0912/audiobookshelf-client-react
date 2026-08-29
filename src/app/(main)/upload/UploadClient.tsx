@@ -1,6 +1,6 @@
 'use client'
 
-import { useMediaNavigation } from '@/contexts/MediaContext'
+import { useAppNavigation } from '@/contexts/AppNavigationContext'
 import { useBookProviders, useMetadata } from '@/contexts/MetadataContext'
 import { useUser } from '@/contexts/UserContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
@@ -78,7 +78,7 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
     }))
   const currentLibraryMediaType = libraries.find((lib) => lib.id === selectedLibrary)?.mediaType
 
-  const { lastCurrentLibraryId } = useMediaNavigation()
+  const { lastCurrentLibraryId } = useAppNavigation()
   const { userDefaultLibraryId } = useUser()
 
   useEffect(() => {
@@ -340,7 +340,7 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
             <p className="px-6 pt-6 text-2xl">{t('LabelUploaderDragAndDrop')}</p>
             <p className="p-6">{t('MessageOr')}</p>
             <div className="flex justify-center gap-4">
-              <FilePicker accept={supFileTypes} onFilesSelected={handleDialogFileSelected}>
+              <FilePicker accept={supFileTypes} multiple={true} onFilesSelected={handleDialogFileSelected}>
                 {t('ButtonChooseFiles')}
               </FilePicker>
               <FilePicker multiple={true} directory={true} onFilesSelected={handleDialogFileSelected}>
@@ -348,10 +348,13 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
               </FilePicker>
             </div>
             <p className="text-foreground-subdued p-6 text-xs">
-              <strong>{t('LabelSupportedFileTypes')}:</strong> {supFileTypes}
+              {t.rich('LabelSupportedFileTypesWithValue', {
+                0: supFileTypes,
+                label: (chunks) => <strong>{chunks}</strong>
+              })}
             </p>
             <p className="text-foreground-subdued px-6 pb-6 text-sm">
-              {t('NoteUploaderFoldersWithMediaFiles')} {currentLibraryMediaType === 'book' ? t('NoteUploaderOnlyAudioFiles') : ''}
+              {currentLibraryMediaType === 'book' ? t('NoteUploaderFoldersWithMediaFilesAndAudio') : t('NoteUploaderFoldersWithMediaFiles')}
             </p>
           </DragDrop>
         </div>
@@ -403,7 +406,10 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
                   </CollapsibleTable>
                 </div>
                 <p className="text-foreground-subdued text-xs">
-                  <strong>{t('LabelSupportedFileTypes')}:</strong> {supFileTypes}
+                  {t.rich('LabelSupportedFileTypesWithValue', {
+                    0: supFileTypes,
+                    label: (chunks) => <strong>{chunks}</strong>
+                  })}
                 </p>
               </div>
             </Alert>
@@ -414,14 +420,14 @@ export default function UploadClient({ libraries }: LibraryClientProps) {
                 {!item.uploadComplete && !item.uploadFailed && (
                   <>
                     {item.isUploading && (
-                      <LoadingIndicator label={'MessageUploading'}>
+                      <LoadingIndicator label={t('MessageUploading')}>
                         <ProgressIndicator progress={item.uploadProgress || 0} />
                         <p className="text-foreground-muted mt-2 text-center text-xs">
                           ({bytesPretty(item.uploadBytesLoaded || 0)}/{bytesPretty(item.uploadBytesTotal || 0)})
                         </p>
                       </LoadingIndicator>
                     )}
-                    {item.isFetchingMetadata && <LoadingIndicator label="LabelFetchingMetadata" />}
+                    {item.isFetchingMetadata && <LoadingIndicator label={t('LabelFetchingMetadata')} />}
                     {/* floating # on left */}
                     <div className="bg-bg border-border absolute -top-3 -left-3 flex h-8 w-8 items-center justify-center rounded-full border">
                       <p className="text-base">{'#' + (index + 1)}</p>

@@ -1,6 +1,7 @@
 'use client'
 
 import Modal from '@/components/modals/Modal'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Btn from '@/components/ui/Btn'
 import IconBtn from '@/components/ui/IconBtn'
 import TextInput from '@/components/ui/TextInput'
@@ -163,11 +164,7 @@ export default function SleepTimerModal({
     onDecrement(adjustedAmount)
   }
 
-  const outerContent = (
-    <div className="absolute start-0 top-0 p-4">
-      <p className="text-xl text-white">{t('HeaderSleepTimer')}</p>
-    </div>
-  )
+  const outerContent = <ModalOuterContent>{t('HeaderSleepTimer')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} outerContent={outerContent} className="sm:max-w-[350px] md:max-w-[350px] lg:max-w-[350px]">
@@ -183,7 +180,7 @@ export default function SleepTimerModal({
                         size="small"
                         disabled={remaining < 30 * 60}
                         className="px-2"
-                        ariaLabel={`${t('ButtonJumpBackward')}, ${thirtyMinutesLabel}`}
+                        ariaLabel={t('AriaLabelJumpBackwardWithDuration', { 0: thirtyMinutesLabel })}
                         onClick={() => handleDecrement(30 * 60)}
                       >
                         <span className="material-symbols text-lg">remove</span>
@@ -193,7 +190,7 @@ export default function SleepTimerModal({
                       <IconBtn
                         className="min-w-9"
                         size="small"
-                        ariaLabel={`${t('ButtonJumpBackward')}, ${fiveMinutesLabel}`}
+                        ariaLabel={t('AriaLabelJumpBackwardWithDuration', { 0: fiveMinutesLabel })}
                         onClick={() => handleDecrement(60 * 5)}
                       >
                         remove
@@ -206,13 +203,18 @@ export default function SleepTimerModal({
                       <IconBtn
                         className="min-w-9"
                         size="small"
-                        ariaLabel={`${t('ButtonJumpForward')}, ${fiveMinutesLabel}`}
+                        ariaLabel={t('AriaLabelJumpForwardWithDuration', { 0: fiveMinutesLabel })}
                         onClick={() => onIncrement(60 * 5)}
                       >
                         add
                       </IconBtn>
 
-                      <Btn size="small" className="px-2" ariaLabel={`${t('ButtonJumpForward')}, ${thirtyMinutesLabel}`} onClick={() => onIncrement(30 * 60)}>
+                      <Btn
+                        size="small"
+                        className="px-2"
+                        ariaLabel={t('AriaLabelJumpForwardWithDuration', { 0: thirtyMinutesLabel })}
+                        onClick={() => onIncrement(30 * 60)}
+                      >
                         <span className="material-symbols text-lg">add</span>
                         <span className="ps-1 text-sm">{thirtyMinutesLabel}</span>
                       </Btn>

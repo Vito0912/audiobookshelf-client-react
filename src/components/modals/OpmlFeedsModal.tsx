@@ -2,7 +2,8 @@
 
 import { createPodcastsFromOpmlAction } from '@/app/(main)/library/[library]/(podcast)/add-podcast/actions'
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Checkbox from '@/components/ui/Checkbox'
 import Dropdown, { DropdownItem } from '@/components/ui/Dropdown'
 import { useLibrary } from '@/contexts/LibraryContext'
@@ -64,11 +65,7 @@ export default function OpmlFeedsModal({ isOpen, feeds, onClose }: OpmlFeedsModa
     })
   }, [autoDownloadEpisodes, feeds, library.id, onClose, selectedFolderId, showToast, t])
 
-  const outerContent = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{t('MessageTaskOpmlImport')}</h2>
-    </div>
-  )
+  const outerContent = <ModalOuterContent>{t('MessageTaskOpmlImport')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} processing={isPending} outerContent={outerContent}>
@@ -111,13 +108,14 @@ export default function OpmlFeedsModal({ isOpen, feeds, onClose }: OpmlFeedsModa
           </div>
         </div>
 
-        <div className="border-border border-t px-4 py-3 sm:px-6">
-          <div className="flex justify-end">
-            <Btn disabled={isPending || !selectedFolderId} loading={isPending} onClick={handleSubmit}>
-              {t('ButtonAddPodcasts')}
-            </Btn>
-          </div>
-        </div>
+        <ModalFooter
+          primary={{
+            label: t('ButtonAddPodcasts'),
+            onClick: handleSubmit,
+            disabled: isPending || !selectedFolderId,
+            loading: isPending
+          }}
+        />
       </div>
     </Modal>
   )

@@ -21,6 +21,7 @@ export interface TextInputProps {
   showCopy?: boolean
   step?: string | number
   min?: string | number
+  max?: string | number
   customInputClass?: string
   wrapperClassName?: string
   size?: 'small' | 'medium' | 'large' | 'auto'
@@ -34,7 +35,11 @@ export interface TextInputProps {
   className?: string
   ref?: React.Ref<HTMLInputElement>
   error?: boolean | string
+  ariaLabel?: string
+  ariaLabelledBy?: string
   autocomplete?: 'off' | 'username' | 'current-password' | 'new-password' | 'email' | 'tel' | string
+  /** Trim leading/trailing whitespace on blur (Vue `trim-whitespace` parity). */
+  trimWhitespace?: boolean
 }
 
 export default function TextInput({
@@ -50,6 +55,7 @@ export default function TextInput({
   showCopy = false,
   step,
   min,
+  max,
   customInputClass,
   wrapperClassName,
   size = 'medium',
@@ -63,7 +69,10 @@ export default function TextInput({
   className,
   ref,
   error,
-  autocomplete = 'off'
+  ariaLabel: ariaLabelProp,
+  ariaLabelledBy,
+  autocomplete = 'off',
+  trimWhitespace = false
 }: TextInputProps) {
   const t = useTypeSafeTranslations()
   const generatedId = useId()
@@ -77,7 +86,7 @@ export default function TextInput({
   const [isInvalidDate, setIsInvalidDate] = useState(false)
 
   const actualType = type === 'password' && showPassword ? 'text' : type
-  const ariaLabel = label || placeholder || undefined
+  const ariaLabel = ariaLabelledBy ? undefined : ariaLabelProp || label || placeholder || undefined
   const ariaInvalid = isInvalidDate
 
   const isDatetimeLocal = type === 'datetime-local'
@@ -111,6 +120,12 @@ export default function TextInput({
   }
 
   const handleBlur = () => {
+    if (trimWhitespace && typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed !== value) {
+        onChange?.(trimmed)
+      }
+    }
     onBlur?.()
   }
 
@@ -180,6 +195,7 @@ export default function TextInput({
           type={actualType}
           step={step?.toString()}
           min={min?.toString()}
+          max={max?.toString()}
           readOnly={readOnly}
           disabled={disabled}
           placeholder={placeholder}
@@ -194,6 +210,9 @@ export default function TextInput({
           // Accessibility attributes
           aria-invalid={ariaInvalid}
           aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          // Password managers inject attributes (e.g. aria-autocomplete) before hydration
+          suppressHydrationWarning={type === 'password'}
           cy-id="text-input-field"
         />
 
@@ -207,7 +226,7 @@ export default function TextInput({
               )}
               style={{ fontSize: '1.1rem' }}
               onClick={handleClear}
-              aria-label={t('ButtonClearInput')}
+              aria-label={t('ButtonClear')}
               cy-id="text-input-clear"
             >
               close

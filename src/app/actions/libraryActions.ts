@@ -7,8 +7,11 @@ import {
   getLibraryItems,
   getLibraryPersonalized,
   getLibraryPlaylists,
-  getLibrarySeries
+  getLibrarySeries,
+  getRecentEpisodes,
+  removeLibraryItemsWithIssues
 } from '@/lib/api'
+import { RECENT_EPISODES_PAGE_SIZE } from '@/lib/recentEpisodes'
 
 export async function fetchLibraryItemsAction(libraryId: string, query: string) {
   return getLibraryItems(libraryId, query)
@@ -36,4 +39,13 @@ export async function fetchCollectionsAction(libraryId: string, query: string) {
 
 export async function fetchPlaylistsAction(libraryId: string, query: string) {
   return getLibraryPlaylists(libraryId, query)
+}
+
+export async function fetchRecentEpisodesAction(libraryId: string, page: number) {
+  if (!Number.isSafeInteger(page) || page < 1) throw new Error('Invalid recent episodes page')
+  return getRecentEpisodes(libraryId, RECENT_EPISODES_PAGE_SIZE, page)
+}
+
+export async function removeLibraryItemsWithIssuesAction(libraryId: string) {
+  return removeLibraryItemsWithIssues(libraryId)
 }

@@ -1,4 +1,3 @@
-import { SettingsDrawerProvider } from '@/contexts/SettingsDrawerContext'
 import { isUserAdminOrUp } from '@/lib/userPermissions'
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
@@ -20,14 +19,14 @@ export default async function SettingsLayout({ children }: Readonly<{ children: 
   }
 
   // Redirect to library page if user is not admin or root
-  if (!isUserAdminOrUp(currentUser.user)) {
+  if (!isUserAdminOrUp(currentUser.user.type)) {
     return redirect('/library')
   }
 
   return (
-    <SettingsDrawerProvider>
+    <>
       <AppBarLoader />
       <SettingsLayoutWrapper>{children}</SettingsLayoutWrapper>
-    </SettingsDrawerProvider>
+    </>
   )
 }

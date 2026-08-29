@@ -1,3 +1,9 @@
+# Requires named build contexts (not the default context):
+#   abs-client — React client repo root (package.json, src, scripts)
+#   abs-server — audiobookshelf server repo root (index.js, server/)
+# Local: docker-compose.yml (abs-client=., abs-server=../audiobookshelf)
+# CI: .github/workflows/docker-build.yml (abs-client=client-react, abs-server=.)
+
 ARG NUSQLITE3_DIR="/usr/local/lib/nusqlite3"
 ARG NUSQLITE3_PATH="${NUSQLITE3_DIR}/libnusqlite3.so"
 
@@ -8,13 +14,12 @@ RUN corepack enable pnpm
 
 WORKDIR /client-react
 
-COPY ./client-react/package.json ./client-react/pnpm-lock.yaml ./client-react/.npmrc ./
-COPY ./client-react/scripts/sync-pdfjs-vendor.mjs ./scripts/sync-pdfjs-vendor.mjs
-COPY ./client-react/scripts/sync-unrar-wasm.mjs ./scripts/sync-unrar-wasm.mjs
+COPY --from=abs-client package.json pnpm-lock.yaml .npmrc ./
+COPY --from=abs-client scripts ./scripts
 
 RUN pnpm install --frozen-lockfile
 
-COPY ./client-react .
+COPY --from=abs-client . .
 
 RUN pnpm run build
 
@@ -44,8 +49,8 @@ RUN apk add --no-cache --update \
   unzip
 
 WORKDIR /server
-COPY index.js package* /server
-COPY /server /server/server
+COPY --from=abs-server index.js package* ./
+COPY --from=abs-server server ./server
 
 RUN case "$TARGETPLATFORM" in \
   "linux/amd64") \
@@ -79,6 +84,10 @@ COPY --from=build-client /client-react/public /app/client-react/public
 COPY --from=build-client /client-react/package.json /app/client-react/package.json
 COPY --from=build-client /client-react/node_modules /app/client-react/node_modules
 
+# next.config.ts runs at container start and rewrites the baked-in basePath
+# placeholder (see scripts/rewriteBuildBasePath.ts).
+COPY --from=build-client /client-react/next.config.ts /app/client-react/next.config.ts
+COPY --from=build-client /client-react/scripts/rewriteBuildBasePath.ts /app/client-react/scripts/rewriteBuildBasePath.ts
 # Copy compiled legacy Vue frontend from build stage
 COPY --from=build-vue-client /client/dist /app/client/dist
 
@@ -94,6 +103,7 @@ ENV NODE_ENV=production
 ENV CONFIG_PATH="/config"
 ENV METADATA_PATH="/metadata"
 ENV SOURCE="docker"
+ENV ROUTER_BASE_PATH=""
 ENV NUSQLITE3_DIR=${NUSQLITE3_DIR}
 ENV NUSQLITE3_PATH=${NUSQLITE3_PATH}
 ENV REACT_CLIENT_PATH="/app/client-react"

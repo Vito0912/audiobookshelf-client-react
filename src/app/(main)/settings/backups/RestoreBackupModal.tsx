@@ -1,5 +1,6 @@
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { formatJsDatetime } from '@/lib/datefns'
 import { Backup } from '@/types/api'
@@ -21,22 +22,24 @@ export default function RestoreBackupModal({ isOpen, backup, dateFormat, timeFor
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="w-full max-w-[675px] md:max-w-[675px]">
-      <div className="max-h-[90vh] overflow-y-auto px-4 py-6 sm:px-6">
-        <p className="text-error text-lg font-semibold">{t('MessageImportantNotice')}</p>
-        <div className="text-foreground py-1 text-base">{t.rich('MessageRestoreBackupWarning', { br: () => <br /> })}</div>
-        <p className="text-foreground my-8 text-center text-lg">
-          {t('MessageRestoreBackupConfirm')} {formatJsDatetime(new Date(backup.createdAt), dateFormat, timeFormat)}?
-        </p>
-        <div className="flex items-center">
-          <Btn color="bg-primary" onClick={onClose}>
-            {t('ButtonNevermind')}
-          </Btn>
-          <div className="grow" />
-          <Btn color="bg-success" onClick={onConfirmRestore}>
-            {t('ButtonRestore')}
-          </Btn>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      className="w-full max-w-[675px] md:max-w-[675px]"
+      outerContent={<ModalOuterContent>{t('ButtonRestore')}</ModalOuterContent>}
+    >
+      <div className="flex max-h-[90vh] flex-col">
+        <div className="overflow-y-auto px-4 py-6 sm:px-6">
+          <p className="text-error text-lg font-semibold">{t('MessageImportantNotice')}</p>
+          <div className="text-foreground py-1 text-base">{t.rich('MessageRestoreBackupWarning', { br: () => <br /> })}</div>
+          <p className="text-foreground my-8 text-center text-lg">
+            {t('MessageRestoreBackupConfirmWithDate', { 0: formatJsDatetime(new Date(backup.createdAt), dateFormat, timeFormat) })}
+          </p>
         </div>
+        <ModalFooter
+          secondary={{ label: t('ButtonNevermind'), onClick: onClose }}
+          primary={{ label: t('ButtonRestore'), onClick: onConfirmRestore }}
+        />
       </div>
     </Modal>
   )

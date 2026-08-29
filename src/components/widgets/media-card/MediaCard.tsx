@@ -3,11 +3,10 @@
 import AddToCollectionModal from '@/components/modals/AddToCollectionModal'
 import AddToPlaylistModal from '@/components/modals/AddToPlaylistModal'
 import AudioFileDataModal from '@/components/modals/AudioFileDataModal'
-import CoverEditModal from '@/components/modals/CoverEditModal'
 import EpisodeEditModal from '@/components/modals/EpisodeEditModal'
 import EpisodeMatchModal from '@/components/modals/EpisodeMatchModal'
-import LibraryItemEditModal from '@/components/modals/LibraryItemEditModal'
-import MatchModal from '@/components/modals/MatchModal'
+import LibraryItemMetadataEditModal, { type MetadataEditSection } from '@/components/modals/LibraryItemMetadataEditModal'
+import PodcastCheckNewEpisodesModal from '@/components/modals/PodcastCheckNewEpisodesModal'
 import PodcastDownloadScheduleModal from '@/components/modals/PodcastDownloadScheduleModal'
 import RssFeedOpenCloseModal from '@/components/modals/RssFeedOpenCloseModal'
 import ShareModal from '@/components/modals/ShareModal'
@@ -24,7 +23,8 @@ import { useCardSize } from '@/contexts/CardSizeContext'
 import { useBookCoverAspectRatio, useLibrary } from '@/contexts/LibraryContext'
 import { useMediaContext } from '@/contexts/MediaContext'
 import { isDragOnlyOverlay, useSortableBookshelfOverlay } from '@/contexts/SortableBookshelfOverlayContext'
-import { useCoarsePointer } from '@/hooks/useMediaQuery'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useMergedRef } from '@/hooks/useMergedRef'
 import { useShiftClickTextSelectionGuard } from '@/hooks/useShiftClickTextSelectionGuard'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { getMediaCardModalNavigationContext } from '@/lib/bookshelfNavigationContext'
@@ -36,7 +36,20 @@ import type { ShelfNavigationEntity } from '@/lib/shelfNavigationEntity'
 import type { BookMedia, EReaderDevice, LibraryItem, MediaProgress, PodcastEpisode, PodcastMedia, UserPermissions } from '@/types/api'
 import { BookshelfView, isBookMedia, isBookMediaWithTracks, isBookMetadata, isPodcastLibraryItem } from '@/types/api'
 import { useRouter } from 'next/navigation'
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode
+} from 'react'
 import { useMediaCardActions } from './useMediaCardActions'
 
 export interface MediaCardProps {
@@ -138,7 +151,7 @@ function MediaCard(props: MediaCardProps) {
 
   const sortableBookshelfOverlay = useSortableBookshelfOverlay()
   const overlayMode = dragOptions?.overlayMode ?? sortableBookshelfOverlay?.overlayMode ?? 'hover'
-  const isCoarsePointer = useCoarsePointer()
+  const isCoarsePointer = useMediaQuery('coarse-pointer')
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTriggeredRef = useRef(false)
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -192,48 +205,50 @@ function MediaCard(props: MediaCardProps) {
 
   const [isHovering, setIsHovering] = useState(false)
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
+  const [cardFrameRef, setCardFrameRef] = useMergedRef<HTMLDivElement>(dragOptions?.cardActivatorRef)
+
+  // Overlay children unmount when selection ends; mouseenter does not re-fire for a stationary pointer.
+  useLayoutEffect(() => {
+    if (isSelectionMode) return
+    if (cardFrameRef.current?.matches(':hover')) {
+      setIsHovering(true)
+    }
+  }, [cardFrameRef, isSelectionMode])
 
   const clearBoundModal = useCallback(() => setBoundModal(null), [setBoundModal])
 
   const closeMoreMenu = useCallback(() => {
     setIsMoreMenuOpen(false)
-    setIsHovering(false)
   }, [])
 
-  const handleOpenMatch = useCallback(() => {
-    closeMoreMenu()
-    if (episode) {
-      const navCtx = getMediaCardEpisodeEditNavigationContext(episode.id, libraryItem.id, shelfEntities, entityIndex)
-      setBoundModal(<EpisodeMatchModal key={`episode-match-modal-${episode.id}`} isOpen navCtx={navCtx} onClose={clearBoundModal} />)
-      return
-    }
-    const navCtx = getMediaCardModalNavigationContext(libraryItem.id, shelfEntities, entityIndex)
-    setBoundModal(<MatchModal key="match-modal" isOpen navCtx={navCtx} onClose={clearBoundModal} />)
-  }, [clearBoundModal, closeMoreMenu, episode, entityIndex, libraryItem.id, shelfEntities, setBoundModal])
+  const handleOpenMetadataEdit = useCallback(
+    (section: MetadataEditSection) => {
+      closeMoreMenu()
+      if (episode) {
+        const navCtx = getMediaCardEpisodeEditNavigationContext(episode.id, libraryItem.id, shelfEntities, entityIndex)
+        if (section === 'match') {
+          setBoundModal(<EpisodeMatchModal key={`episode-match-modal-${episode.id}`} isOpen navCtx={navCtx} onClose={clearBoundModal} />)
+          return
+        }
+        setBoundModal(<EpisodeEditModal key={`episode-edit-modal-${episode.id}`} isOpen navCtx={navCtx} onClose={clearBoundModal} />)
+        return
+      }
+      const navCtx = getMediaCardModalNavigationContext(libraryItem.id, shelfEntities, entityIndex)
+      setBoundModal(
+        <LibraryItemMetadataEditModal key={`metadata-edit-modal-${section}`} isOpen initialSection={section} navCtx={navCtx} onClose={clearBoundModal} />
+      )
+    },
+    [clearBoundModal, closeMoreMenu, episode, entityIndex, libraryItem.id, shelfEntities, setBoundModal]
+  )
 
-  const handleOpenEdit = useCallback(() => {
-    closeMoreMenu()
-    if (episode) {
-      const navCtx = getMediaCardEpisodeEditNavigationContext(episode.id, libraryItem.id, shelfEntities, entityIndex)
-      setBoundModal(<EpisodeEditModal key={`episode-edit-modal-${episode.id}`} isOpen navCtx={navCtx} onClose={clearBoundModal} />)
-      return
-    }
-    const navCtx = getMediaCardModalNavigationContext(libraryItem.id, shelfEntities, entityIndex)
-    setBoundModal(<LibraryItemEditModal key="library-item-edit-modal" isOpen navCtx={navCtx} onClose={clearBoundModal} />)
-  }, [clearBoundModal, closeMoreMenu, episode, libraryItem, shelfEntities, entityIndex, setBoundModal])
-
-  const handleOpenCoverEdit = useCallback(() => {
-    closeMoreMenu()
-    if (episode) return
-    const navCtx = getMediaCardModalNavigationContext(libraryItem.id, shelfEntities, entityIndex)
-    setBoundModal(<CoverEditModal key={`cover-edit-modal-${libraryItem.id}`} isOpen navCtx={navCtx} onClose={clearBoundModal} />)
-  }, [clearBoundModal, closeMoreMenu, episode, libraryItem.id, shelfEntities, entityIndex, setBoundModal])
+  const handleOpenEdit = useCallback(() => handleOpenMetadataEdit('details'), [handleOpenMetadataEdit])
+  const handleOpenMatch = useCallback(() => handleOpenMetadataEdit('match'), [handleOpenMetadataEdit])
 
   const handleMoreMenuOpenChange = (isOpen: boolean) => {
     setIsMoreMenuOpen(isOpen)
-    // Clear hovering state when menu closes to prevent overlay from staying open
+    // Keep overlay if the pointer is still on the card; otherwise hide it (menu is portaled).
     if (!isOpen) {
-      setIsHovering(false)
+      setIsHovering(!!cardFrameRef.current?.matches(':hover'))
     }
   }
 
@@ -369,6 +384,7 @@ function MediaCard(props: MediaCardProps) {
     confirmState,
     rssFeedModalOpen,
     scheduleModalOpen,
+    checkNewEpisodesModalOpen,
     shareModalOpen,
     collectionsModalOpen,
     playlistsModalOpen,
@@ -376,6 +392,7 @@ function MediaCard(props: MediaCardProps) {
     closeConfirm,
     closeRssFeedModal,
     closeScheduleModal,
+    closeCheckNewEpisodesModal,
     closeShareModal,
     closeCollectionsModal,
     closePlaylistsModal,
@@ -391,7 +408,7 @@ function MediaCard(props: MediaCardProps) {
     media,
     title,
     author: author || null,
-    episodeForQueue: episode || null,
+    episode: episode ?? null,
     mediaProgress,
     itemIsFinished,
     userProgressPercent,
@@ -405,7 +422,6 @@ function MediaCard(props: MediaCardProps) {
     isQueued,
     initialShare: libraryItem.mediaItemShare ?? null,
     onOpenMatch: handleOpenMatch,
-    onOpenCoverEdit: handleOpenCoverEdit,
     onDeleteSuccess,
     playerControls
   })
@@ -532,7 +548,7 @@ function MediaCard(props: MediaCardProps) {
       <MediaCardFrame
         width={coverWidth}
         height={coverHeight}
-        rootRef={dragOptions?.cardActivatorRef}
+        rootRef={setCardFrameRef}
         sortableFrameProps={dragOptions?.sortableFrameProps}
         className={dragOptions ? 'group' : undefined}
         aria-selected={hasSelectionHandler && isSelectionMode ? selected : undefined}
@@ -546,14 +562,12 @@ function MediaCard(props: MediaCardProps) {
         onKeyDown={cardKeyDownHandler}
         onFocus={cardFocusHandler}
         onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
-        onMouseOver={
-          dragOptions
-            ? () => {
-                setIsHovering(true)
-              }
-            : undefined
-        }
+        onMouseLeave={(event) => {
+          // Child unmount (e.g. overlay after leaving selection) can fire mouseleave
+          // even when the pointer is still over the card.
+          if (event.currentTarget.matches(':hover')) return
+          setIsHovering(false)
+        }}
         cardId={cardId}
         cy-id="MediaCard"
         footer={
@@ -651,6 +665,9 @@ function MediaCard(props: MediaCardProps) {
         />
       )}
       {isPodcast && scheduleModalOpen && <PodcastDownloadScheduleModal isOpen={scheduleModalOpen} onClose={closeScheduleModal} libraryItem={libraryItem} />}
+      {isPodcast && checkNewEpisodesModalOpen && (
+        <PodcastCheckNewEpisodesModal isOpen={checkNewEpisodesModalOpen} onClose={closeCheckNewEpisodesModal} libraryItem={libraryItem} />
+      )}
       {shareModalOpen && (
         <ShareModal
           isOpen={shareModalOpen}

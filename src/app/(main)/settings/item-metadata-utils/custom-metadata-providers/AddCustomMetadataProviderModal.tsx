@@ -1,7 +1,8 @@
 'use client'
 
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import TextInput from '@/components/ui/TextInput'
 import { useGlobalToast } from '@/contexts/ToastContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
@@ -56,18 +57,14 @@ export default function AddCustomMetadataProviderModal({ isOpen, onClose, onSubm
       showToast(t('ToastProviderCreatedSuccess'), { type: 'success' })
       handleClose()
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = error instanceof Error ? error.message : t('ToastUnknownError')
       console.error('Failed to add provider', error)
-      showToast(`${t('ToastProviderCreatedFailed')}: ${errorMessage}`, { type: 'error' })
+      showToast(t('ToastProviderCreatedFailedWithError', { 0: errorMessage }), { type: 'error' })
       setProcessing(false)
     }
   }
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{t('HeaderAddCustomMetadataProvider')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{t('HeaderAddCustomMetadataProvider')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} processing={processing} onClose={handleClose} outerContent={outerContentTitle} className="w-[700px]">
@@ -83,7 +80,12 @@ export default function AddCustomMetadataProviderModal({ isOpen, onClose, onSubm
           </div>
 
           <div className="mt-4">
-            <TextInput label="URL" value={url} placeholder="URL" onChange={setUrl} />
+            <TextInput
+              label="URL" // i18n-ignore
+              value={url}
+              placeholder="URL" // i18n-ignore
+              onChange={setUrl}
+            />
           </div>
 
           <div className="mt-4">
@@ -97,13 +99,13 @@ export default function AddCustomMetadataProviderModal({ isOpen, onClose, onSubm
           </div>
         </div>
 
-        <div className="border-border border-t px-4 py-3">
-          <div className="flex items-center justify-end">
-            <Btn color="bg-success" disabled={processing} onClick={handleSubmit}>
-              {t('ButtonAdd')}
-            </Btn>
-          </div>
-        </div>
+        <ModalFooter
+          primary={{
+            label: t('ButtonAdd'),
+            onClick: handleSubmit,
+            disabled: processing
+          }}
+        />
       </div>
     </Modal>
   )

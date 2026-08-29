@@ -4,7 +4,6 @@ import { useMediaContext } from '@/contexts/MediaContext'
 import { useUser } from '@/contexts/UserContext'
 import { mergeClasses } from '@/lib/merge-classes'
 import SideNav from './SideNav'
-import SideNavMobileDrawer from './SideNavMobileDrawer'
 
 interface SettingsLayoutWrapperProps {
   children: React.ReactNode
@@ -17,13 +16,11 @@ export default function SettingsLayoutWrapper({ children }: SettingsLayoutWrappe
   const serverVersion = serverSettings?.version || 'Error'
 
   return (
-    <div className={mergeClasses('page-wrapper flex overflow-x-hidden', libraryItemIdStreaming ? 'streaming' : '')}>
+    <div className={mergeClasses('page-wrapper flex overflow-hidden', libraryItemIdStreaming ? 'streaming' : '')}>
       <SideNav serverVersion={serverVersion} installSource={installSource} />
-      <div className="page-bg-gradient min-w-0 flex-1">
-        <div className="h-full w-full overflow-x-hidden overflow-y-auto">{children}</div>
+      <div className="page-bg-gradient min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div className="h-full min-h-0 w-full overflow-x-hidden overflow-y-auto pb-8">{children}</div>
       </div>
-
-      <SideNavMobileDrawer serverVersion={serverVersion} installSource={installSource} />
     </div>
   )
 }

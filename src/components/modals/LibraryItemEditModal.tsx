@@ -2,7 +2,7 @@
 
 import { updateLibraryItemMediaAction } from '@/app/actions/mediaActions'
 import LibraryItemModal, { useLibraryItemModal, type LibraryItemModalItemSource } from '@/components/modals/LibraryItemModal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
 import LoadingIndicator from '@/components/ui/LoadingIndicator'
 import BookDetailsEdit, { BookDetailsEditRef, BookUpdatePayload } from '@/components/widgets/BookDetailsEdit'
 import PodcastDetailsEdit, { PodcastDetailsEditRef, PodcastUpdatePayload } from '@/components/widgets/PodcastDetailsEdit'
@@ -73,16 +73,25 @@ export type LibraryItemEditModalProps = {
   onClose: () => void
 } & LibraryItemModalItemSource
 
-type LibraryItemEditModalContentProps = {
+export type LibraryItemEditModalContentProps = {
   isOpen: boolean
   startSaveTransition: TransitionStartFunction
   isSavePending: boolean
   onClose: () => void
   /** When true (navCtx), body height stays fixed so prev/next does not resize the panel. */
   stableBodyHeight: boolean
+  /** When true, fill a parent with a fixed height (e.g. SectionedModalBody). */
+  fillParent?: boolean
 }
 
-function LibraryItemEditModalContent({ isOpen, startSaveTransition, isSavePending, onClose, stableBodyHeight }: LibraryItemEditModalContentProps) {
+export function LibraryItemEditModalContent({
+  isOpen,
+  startSaveTransition,
+  isSavePending,
+  onClose,
+  stableBodyHeight,
+  fillParent = false
+}: LibraryItemEditModalContentProps) {
   const { resolvedItem, fetchPending, pendingEntityId } = useLibraryItemModal()
   const t = useTypeSafeTranslations()
   const { showToast } = useGlobalToast()
@@ -280,26 +289,31 @@ function LibraryItemEditModalContent({ isOpen, startSaveTransition, isSavePendin
   return (
     <div
       className={
-        stableBodyHeight
-          ? /* Slightly above empty book placeholder; extra content scrolls in the inner region. */
-            'flex h-[min(50rem,85vh)] max-h-[85vh] w-full flex-col overflow-hidden rounded-lg'
-          : 'flex max-h-[85vh] w-full flex-col rounded-lg'
+        fillParent
+          ? 'flex h-full min-h-0 w-full flex-col overflow-hidden rounded-lg'
+          : stableBodyHeight
+            ? /* Slightly above empty book placeholder; extra content scrolls in the inner region. */
+              'flex h-[min(50rem,85vh)] max-h-[85vh] w-full flex-col overflow-hidden rounded-lg'
+            : 'flex max-h-[85vh] w-full flex-col rounded-lg'
       }
     >
       <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         {formInner}
       </div>
 
-      <div
-        className={`bg-bg border-border flex shrink-0 justify-end gap-3 border-t px-4 py-3 transition-shadow duration-200 ${footerShadow ? 'box-shadow-md-up' : ''}`}
-      >
-        <Btn onClick={() => handleSave(false)} disabled={saveDisabled}>
-          {t('ButtonSave')}
-        </Btn>
-        <Btn onClick={() => handleSave(true)} disabled={saveDisabled}>
-          {t('ButtonSaveAndClose')}
-        </Btn>
-      </div>
+      <ModalFooter
+        shadow={footerShadow}
+        secondary={{
+          label: t('ButtonSave'),
+          onClick: () => handleSave(false),
+          disabled: saveDisabled
+        }}
+        primary={{
+          label: t('ButtonSaveAndClose'),
+          onClick: () => handleSave(true),
+          disabled: saveDisabled
+        }}
+      />
     </div>
   )
 }

@@ -1,7 +1,8 @@
 'use client'
 
 import TabbedModal from '@/components/modals/TabbedModal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import { DropdownItem } from '@/components/ui/Dropdown'
 import { useMetadata } from '@/contexts/MetadataContext'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
@@ -37,7 +38,7 @@ const defaultLibrarySettings: LibrarySettings = {
 const getInitialFormData = (library: Library | null): LibraryFormData => {
   if (library) {
     return {
-      name: library.name,
+      name: library.name.trim(),
       mediaType: library.mediaType,
       icon: library.icon || 'database',
       provider: library.provider || '',
@@ -53,6 +54,13 @@ const getInitialFormData = (library: Library | null): LibraryFormData => {
     provider: '',
     folders: [],
     settings: { ...defaultLibrarySettings }
+  }
+}
+
+function normalizeLibraryFormData(formData: LibraryFormData): LibraryFormData {
+  return {
+    ...formData,
+    name: formData.name.trim()
   }
 }
 
@@ -187,28 +195,25 @@ export default function LibraryEditModal({ isOpen, library, processing = false, 
     if (!isEditing) return true
     const trimmedNew = newFolderPath.trim()
     if (trimmedNew && !formData.folders.some((f) => f.fullPath.trim() === trimmedNew)) return true
-    return JSON.stringify(formData) !== initialFormDataRef.current
+    return JSON.stringify(normalizeLibraryFormData(formData)) !== initialFormDataRef.current
   }, [formData, isEditing, newFolderPath])
 
   const handleSubmit = () => {
     if (!isValid || !hasChanges || processing) return
 
+    const normalizedFormData = normalizeLibraryFormData(formData)
     const trimmedNew = newFolderPath.trim()
-    if (trimmedNew && !formData.folders.some((f) => f.fullPath.trim() === trimmedNew)) {
+    if (trimmedNew && !normalizedFormData.folders.some((f) => f.fullPath.trim() === trimmedNew)) {
       onSubmit({
-        ...formData,
-        folders: [...formData.folders, { fullPath: trimmedNew }]
+        ...normalizedFormData,
+        folders: [...normalizedFormData.folders, { fullPath: trimmedNew }]
       })
     } else {
-      onSubmit(formData)
+      onSubmit(normalizedFormData)
     }
   }
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{isEditing ? t('HeaderUpdateLibrary') : t('HeaderNewLibrary')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{isEditing ? t('HeaderUpdateLibrary') : t('HeaderNewLibrary')}</ModalOuterContent>
 
   return (
     <TabbedModal
@@ -220,11 +225,14 @@ export default function LibraryEditModal({ isOpen, library, processing = false, 
       onTabChange={setSelectedTab}
       contentClassName="relative px-4 sm:px-6 py-6 max-h-[70vh] min-h-[440px] overflow-y-auto"
       footer={
-        <div className="flex items-center justify-end">
-          <Btn disabled={!isValid || !hasChanges} loading={processing} onClick={handleSubmit}>
-            {isEditing ? t('ButtonSave') : t('ButtonCreate')}
-          </Btn>
-        </div>
+        <ModalFooter
+          primary={{
+            label: isEditing ? t('ButtonSave') : t('ButtonCreate'),
+            onClick: handleSubmit,
+            disabled: !isValid || !hasChanges,
+            loading: processing
+          }}
+        />
       }
     >
       {selectedTab === 'details' && (

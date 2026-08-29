@@ -6,6 +6,8 @@ import { Author, User } from '@/types/api'
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import AuthorImage from '../covers/AuthorImage'
 import Modal from '../modals/Modal'
+import ModalFooter from '../modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Btn from '../ui/Btn'
 import IconBtn from '../ui/IconBtn'
 import SlateEditor from '../ui/SlateEditor'
@@ -17,6 +19,14 @@ interface AuthorEditModalProps {
   user: User
   author?: Author | null
   onClose: () => void
+}
+
+function normalizeEditedAuthor(edited: Partial<Author>): Partial<Author> {
+  return {
+    ...edited,
+    name: edited.name?.trim() ?? '',
+    asin: edited.asin?.trim() ?? ''
+  }
 }
 
 export default function AuthorEditModal({ isOpen, user, author: authorProp, onClose }: AuthorEditModalProps) {
@@ -33,9 +43,8 @@ export default function AuthorEditModal({ isOpen, user, author: authorProp, onCl
 
   const isDirty = useMemo(() => {
     if (!editedAuthor || !author) return false
-    return (
-      editedAuthor.name !== author.name || (editedAuthor.asin || '') !== (author.asin || '') || (editedAuthor.description || '') !== (author.description || '')
-    )
+    const normalized = normalizeEditedAuthor(editedAuthor)
+    return normalized.name !== author.name || (normalized.asin || '') !== (author.asin || '') || (editedAuthor.description || '') !== (author.description || '')
   }, [editedAuthor, author])
 
   const saveDisabled = !isDirty
@@ -74,7 +83,7 @@ export default function AuthorEditModal({ isOpen, user, author: authorProp, onCl
       return
     }
     startTransition(async () => {
-      const success = await handleSave(author.id, author.name || '', editedAuthor)
+      const success = await handleSave(author.id, author.name || '', normalizeEditedAuthor(editedAuthor))
       if (success) onClose()
     })
   }
@@ -113,6 +122,7 @@ export default function AuthorEditModal({ isOpen, user, author: authorProp, onCl
           onClose()
         }}
         processing={isPending}
+        outerContent={<ModalOuterContent title={author.name}>{author.name}</ModalOuterContent>}
       >
         <div className="flex max-h-[90vh] flex-col">
           <div className="overflow-y-auto px-4 py-6 sm:px-6">
@@ -136,16 +146,17 @@ export default function AuthorEditModal({ isOpen, user, author: authorProp, onCl
               {/* form */}
               <div className="mb-2 grow px-2 pt-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:gap-0">
-                  <TextInput className="w-full" placeholder={t('LabelImageURLFromTheWeb')} value={imgUrl} onChange={setImgUrl}></TextInput>
+                  <TextInput className="w-full" placeholder={t('LabelImageURLFromTheWeb')} value={imgUrl} onChange={setImgUrl} trimWhitespace />
                   <Btn
                     color="bg-success"
                     className="flex-shrink-0 sm:ml-2"
                     onClick={() => {
-                      if (!imgUrl?.startsWith('http:') && !imgUrl?.startsWith('https:')) {
+                      const trimmedUrl = imgUrl.trim()
+                      if (!trimmedUrl.startsWith('http:') && !trimmedUrl.startsWith('https:')) {
                         showToast(t('ToastInvalidImageUrl'), { type: 'error' })
                         return
                       }
-                      handleSubmitImageWrapper(imgUrl)
+                      handleSubmitImageWrapper(trimmedUrl)
                       setImgUrl('')
                     }}
                   >
@@ -162,13 +173,21 @@ export default function AuthorEditModal({ isOpen, user, author: authorProp, onCl
                       placeholder={t('LabelName')}
                       value={editedAuthor.name || ''}
                       onChange={(value) => setEditedAuthor({ ...editedAuthor, name: value })}
+                      trimWhitespace
                     />
                   </div>
                   <div className="w-full sm:w-1/4">
                     <label htmlFor="" className="mb-1 px-1 text-sm">
-                      ASIN
+                      {
+                        'ASIN' // i18n-ignore
+                      }
                     </label>
-                    <TextInput placeholder="ASIN" value={editedAuthor.asin || ''} onChange={(value) => setEditedAuthor({ ...editedAuthor, asin: value })} />
+                    <TextInput
+                      placeholder="ASIN" // i18n-ignore
+                      value={editedAuthor.asin || ''}
+                      onChange={(value) => setEditedAuthor({ ...editedAuthor, asin: value })}
+                      trimWhitespace
+                    />
                   </div>
                 </div>
                 <div className="flex grow pt-4">
@@ -185,20 +204,25 @@ export default function AuthorEditModal({ isOpen, user, author: authorProp, onCl
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="border-border border-t px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-4">
-              {user.permissions.delete && (
-                <Btn color="bg-error" className="mr-auto" onClick={handleOnDelete}>
-                  {t('ButtonRemove')}
-                </Btn>
-              )}
-              <Btn onClick={handleQuickMatchWrapper}>{t('ButtonQuickMatch')}</Btn>
-              <Btn disabled={saveDisabled} onClick={handleSaveClick}>
-                {t('ButtonSave')}
-              </Btn>
-            </div>
-          </div>
+          <ModalFooter
+            destructive={
+              user.permissions.delete
+                ? {
+                    label: t('ButtonRemove'),
+                    onClick: handleOnDelete
+                  }
+                : undefined
+            }
+            secondary={{
+              label: t('ButtonQuickMatch'),
+              onClick: handleQuickMatchWrapper
+            }}
+            primary={{
+              label: t('ButtonSave'),
+              onClick: handleSaveClick,
+              disabled: saveDisabled
+            }}
+          />
         </div>
       </Modal>
       <ConfirmDialog

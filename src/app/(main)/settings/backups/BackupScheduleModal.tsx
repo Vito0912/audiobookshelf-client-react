@@ -1,5 +1,6 @@
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import CronExpressionBuilder from '@/components/widgets/CronExpressionBuilder'
 import CronExpressionPreview from '@/components/widgets/CronExpressionPreview'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
@@ -30,11 +31,7 @@ export default function BackupScheduleModal({ isOpen, onClose, isPending, cronEx
 
   const hasChanges = cronExpressionValue !== cronExpression
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{t('HeaderSetBackupSchedule')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{t('HeaderSetBackupSchedule')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} outerContent={outerContentTitle} className="w-full md:max-w-[700px] lg:max-w-[700px]">
@@ -44,14 +41,14 @@ export default function BackupScheduleModal({ isOpen, onClose, isPending, cronEx
           <CronExpressionPreview cronExpression={cronExpressionValue} />
         </div>
 
-        {/* Footer */}
-        <div className="border-border border-t px-4 py-3">
-          <div className="flex items-center justify-end">
-            <Btn onClick={handleSave} disabled={!hasChanges} loading={isPending}>
-              {t('ButtonSave')}
-            </Btn>
-          </div>
-        </div>
+        <ModalFooter
+          primary={{
+            label: t('ButtonSave'),
+            onClick: handleSave,
+            disabled: !hasChanges,
+            loading: isPending
+          }}
+        />
       </div>
     </Modal>
   )

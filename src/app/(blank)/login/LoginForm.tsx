@@ -3,14 +3,19 @@
 import Btn from '@/components/ui/Btn'
 import TextInput from '@/components/ui/TextInput'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
+import { withBasePath } from '@/lib/basePath'
+import { getUserDefaultUrlPath } from '@/lib/userPermissions'
+import { AuthFormData } from '@/types/api'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 interface LoginFormProps {
-  loginCustomMessage?: string | null
+  authMethods: string[]
+  authFormData: AuthFormData
+  serverUrl: string
 }
 
-export default function LoginForm({ loginCustomMessage }: LoginFormProps) {
+export default function LoginForm({ authMethods, authFormData, serverUrl }: LoginFormProps) {
   const t = useTypeSafeTranslations()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -19,13 +24,47 @@ export default function LoginForm({ loginCustomMessage }: LoginFormProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const showLocalLogin = authMethods.includes('local') || authMethods.length === 0
+  const showOpenIdLogin = authMethods.includes('openid')
+
+  const openIdButtonText = authFormData.authOpenIDButtonText || 'Login with OpenId'
+  const loginCustomMessage = authFormData.authLoginCustomMessage || null
+
+  const redirectParam = searchParams.get('redirect')
+  const safeRedirect = redirectParam?.startsWith('/') && !redirectParam.startsWith('//') ? redirectParam : null
+  const openIdAuthUri = useMemo(() => {
+    const callbackUrl = new URL(`${serverUrl}/login`)
+    if (safeRedirect) {
+      callbackUrl.searchParams.set('redirect', safeRedirect)
+    }
+    return `${serverUrl}/auth/openid?callback=${encodeURIComponent(callbackUrl.href)}`
+  }, [serverUrl, safeRedirect])
+
+  useEffect(() => {
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      setError(errorParam)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('error')
+      window.history.replaceState({}, '', url.href)
+    }
+
+    if (!showOpenIdLogin) return
+
+    const autoLaunchParam = searchParams.get('autoLaunch')
+    const shouldAutoLaunch = (authFormData.authOpenIDAutoLaunch && autoLaunchParam !== '0') || autoLaunchParam === '1'
+    if (shouldAutoLaunch) {
+      window.location.href = openIdAuthUri
+    }
+  }, [searchParams, showOpenIdLogin, authFormData.authOpenIDAutoLaunch, openIdAuthUri])
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
       setError('')
       setLoading(true)
       try {
-        const res = await fetch('/internal-api/login', {
+        const res = await fetch(withBasePath('/internal-api/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
@@ -38,16 +77,10 @@ export default function LoginForm({ loginCustomMessage }: LoginFormProps) {
           return
         }
         const userResponse = await res.json()
-        const userDefaultLibraryId = userResponse?.userDefaultLibraryId
-
-        // Get redirect parameter
-        const redirect = searchParams.get('redirect')
-        if (redirect) {
-          router.replace(redirect)
-        } else if (userDefaultLibraryId) {
-          router.replace(`/library/${userDefaultLibraryId}`)
+        if (safeRedirect) {
+          router.replace(safeRedirect)
         } else {
-          router.replace('/settings')
+          router.replace(getUserDefaultUrlPath(userResponse?.userDefaultLibraryId ?? null))
         }
       } catch (error) {
         console.error('[LoginForm] Error:', error)
@@ -55,27 +88,42 @@ export default function LoginForm({ loginCustomMessage }: LoginFormProps) {
         setLoading(false)
       }
     },
-    [username, password, t, router, searchParams]
+    [username, password, t, router, safeRedirect]
   )
 
   return (
-    <form onSubmit={handleSubmit} className="bg-bg border-border w-full max-w-md rounded-lg border p-4 shadow-lg">
+    <div className="bg-bg border-border w-full max-w-md rounded-lg border p-4 shadow-lg">
       <h1 className="text-center text-2xl font-bold">{t('LabelLogin')}</h1>
 
       <div className="bg-border my-4 h-px w-full" />
 
       {loginCustomMessage ? <div className="default-style mb-4" dangerouslySetInnerHTML={{ __html: loginCustomMessage }} /> : null}
 
-      <div className="mb-4 flex flex-col gap-4">
-        <TextInput label={t('LabelUsername')} value={username} autocomplete="username" onChange={setUsername} />
-        <TextInput label={t('LabelPassword')} value={password} type="password" autocomplete="current-password" onChange={setPassword} />
-      </div>
-      {error && <div className="mb-4 text-center text-sm text-red-400">{error}</div>}
-      <div className="flex justify-end">
-        <Btn type="submit" loading={loading}>
-          {t('LabelSubmit')}
-        </Btn>
-      </div>
-    </form>
+      {error ? <div className="mb-4 text-center text-sm text-red-400">{error}</div> : null}
+
+      {showLocalLogin ? (
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4 flex flex-col gap-4">
+            <TextInput label={t('LabelUsername')} value={username} autocomplete="username" onChange={setUsername} />
+            <TextInput label={t('LabelPassword')} value={password} type="password" autocomplete="current-password" onChange={setPassword} />
+          </div>
+          <div className="flex justify-end">
+            <Btn type="submit" loading={loading}>
+              {t('ButtonSubmit')}
+            </Btn>
+          </div>
+        </form>
+      ) : null}
+
+      {showLocalLogin && showOpenIdLogin ? <div className="bg-border my-4 h-px w-full" /> : null}
+
+      {showOpenIdLogin ? (
+        <div className="flex py-3">
+          <a href={openIdAuthUri} className="bg-primary w-full rounded-md border border-gray-600 px-8 py-2 text-center leading-none text-white shadow-md">
+            {openIdButtonText}
+          </a>
+        </div>
+      ) : null}
+    </div>
   )
 }

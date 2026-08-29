@@ -1,7 +1,8 @@
 'use client'
 
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Dropdown, { DropdownItem } from '@/components/ui/Dropdown'
 import TextInput from '@/components/ui/TextInput'
 import ToggleSwitch from '@/components/ui/ToggleSwitch'
@@ -83,7 +84,7 @@ export default function EditApiKeyModal({ isOpen, apiKey, users, onClose, onSubm
     if (expiresInSeconds) {
       formData.expiresIn = parseInt(expiresInSeconds)
     }
-    onSubmit(formData)
+    onSubmit({ ...formData, name: formData.name.trim() })
   }
 
   // Convert users to dropdown items with username:type format
@@ -95,11 +96,7 @@ export default function EditApiKeyModal({ isOpen, apiKey, users, onClose, onSubm
     }))
   }, [users])
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{isEditing ? t('HeaderUpdateApiKey') : t('HeaderNewApiKey')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{isEditing ? t('HeaderUpdateApiKey') : t('HeaderNewApiKey')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} outerContent={outerContentTitle} className="w-[700px]">
@@ -114,6 +111,7 @@ export default function EditApiKeyModal({ isOpen, apiKey, users, onClose, onSubm
               placeholder={t('LabelName')}
               readOnly={isEditing}
               onChange={(value) => setFormData((prev) => ({ ...prev, name: value }))}
+              trimWhitespace={!isEditing}
             />
 
             {/* Expires In (seconds) - Hidden when editing */}
@@ -156,14 +154,13 @@ export default function EditApiKeyModal({ isOpen, apiKey, users, onClose, onSubm
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="border-border border-t px-4 py-3">
-          <div className="flex items-center justify-end">
-            <Btn disabled={!isValid} onClick={handleSubmit}>
-              {isEditing ? t('ButtonSave') : t('ButtonCreate')}
-            </Btn>
-          </div>
-        </div>
+        <ModalFooter
+          primary={{
+            label: isEditing ? t('ButtonSave') : t('ButtonCreate'),
+            onClick: handleSubmit,
+            disabled: !isValid
+          }}
+        />
       </div>
     </Modal>
   )

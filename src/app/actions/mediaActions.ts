@@ -12,6 +12,10 @@ export async function toggleFinishedAction(libraryItemId: string, params: { isFi
   return api.updateMediaFinished(libraryItemId, params)
 }
 
+export async function deleteMediaProgressAction(progressId: string) {
+  return api.deleteMediaProgress(progressId)
+}
+
 export async function batchUpdateMediaFinishedAction(payload: { libraryItemId: string; episodeId?: string; isFinished: boolean }[]) {
   return api.batchUpdateMediaFinished(payload)
 }
@@ -75,6 +79,10 @@ export async function downloadPodcastEpisodesAction(libraryItemId: string, episo
 
 export async function clearPodcastDownloadQueueAction(libraryItemId: string) {
   return api.clearPodcastDownloadQueue(libraryItemId)
+}
+
+export async function checkPodcastNewEpisodesAction(libraryItemId: string, limit: number) {
+  return api.checkPodcastNewEpisodes(libraryItemId, limit)
 }
 
 export async function getPodcastEpisodeAction(libraryItemId: string, episodeId: string) {

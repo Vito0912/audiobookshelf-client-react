@@ -3,6 +3,7 @@
 import { getExpandedLibraryItemAction } from '@/app/actions/mediaActions'
 import type { ModalProps } from '@/components/modals/Modal'
 import Modal from '@/components/modals/Modal'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import ModalSideNavigation from '@/components/modals/ModalSideNavigation'
 import { useLibrary } from '@/contexts/LibraryContext'
 import { useGlobalToast } from '@/contexts/ToastContext'
@@ -43,6 +44,8 @@ export type LibraryItemModalProps = Omit<ModalProps, 'outerContent' | 'sideNavig
   LibraryItemModalItemSource & {
     additionalProcessing?: boolean
     children: ReactNode
+    /** If set, prev/next wait for `proceed()` (e.g. confirm unsaved chapter edits). */
+    onBeforeNavigate?: (proceed: () => void) => void
   }
 
 /**
@@ -51,7 +54,7 @@ export type LibraryItemModalProps = Omit<ModalProps, 'outerContent' | 'sideNavig
  * Descendants read `resolvedItem` / `fetchPending` / `pendingEntityId` / `syncResolvedItem` via {@link useLibraryItemModal}.
  */
 export default function LibraryItemModal(props: LibraryItemModalProps) {
-  const { additionalProcessing = false, children, isOpen, onClose, persistent, zIndexClass, bgOpacityClass, className, style } = props
+  const { additionalProcessing = false, children, isOpen, onClose, persistent, zIndexClass, bgOpacityClass, className, style, onBeforeNavigate } = props
 
   const navCtxMode = 'navCtx' in props
   const navCtx = navCtxMode ? props.navCtx : undefined
@@ -127,24 +130,22 @@ export default function LibraryItemModal(props: LibraryItemModalProps) {
 
   const handleGoPrev = useCallback(() => {
     blurActiveElement()
-    goPrev()
-  }, [blurActiveElement, goPrev])
+    const proceed = () => goPrev()
+    if (onBeforeNavigate) onBeforeNavigate(proceed)
+    else proceed()
+  }, [blurActiveElement, goPrev, onBeforeNavigate])
 
   const handleGoNext = useCallback(() => {
     blurActiveElement()
-    goNext()
-  }, [blurActiveElement, goNext])
+    const proceed = () => goNext()
+    if (onBeforeNavigate) onBeforeNavigate(proceed)
+    else proceed()
+  }, [blurActiveElement, goNext, onBeforeNavigate])
 
   const mediaTitle = resolvedItem?.media.metadata.title ?? ''
   const outerContent = useMemo(() => {
     if (!mediaTitle) return undefined
-    return (
-      <div className="absolute start-0 top-0 p-4">
-        <h2 className="max-w-[calc(100vw-4rem)] truncate text-xl text-white" title={mediaTitle}>
-          {mediaTitle}
-        </h2>
-      </div>
-    )
+    return <ModalOuterContent title={mediaTitle}>{mediaTitle}</ModalOuterContent>
   }, [mediaTitle])
 
   const showRails = navCtxMode && entityIds.length > 1

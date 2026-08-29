@@ -17,6 +17,7 @@ export interface DropdownItem {
   value: string | number
   subtext?: string
   keepOpen?: boolean
+  leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode
   disabled?: boolean
   /** Subitems for two-level menu support */
@@ -38,6 +39,8 @@ interface DropdownProps {
   displayText?: string
   /** Use portal to render the dropdown menu. Useful for avoiding clipping issues. */
   usePortal?: boolean
+  /** When true, menu item labels wrap up to two lines then truncate */
+  wrapText?: boolean
 }
 
 /**
@@ -57,7 +60,8 @@ export default function Dropdown({
   rightIcon,
   highlightSelected = false,
   displayText,
-  usePortal = false
+  usePortal = false,
+  wrapText = false
 }: DropdownProps) {
   const [showMenu, setShowMenu] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
@@ -66,6 +70,7 @@ export default function Dropdown({
   // Type-to-filter for submenus
   const [submenuFilterText, setSubmenuFilterText] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const controlWrapperRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLUListElement>(null)
 
   // Generate unique ID for this dropdown instance
@@ -100,8 +105,8 @@ export default function Dropdown({
     }
   }
 
-  const openSubMenu = (index: number) => {
-    const currentItem = items[index]
+  const openSubMenu = (index: number, menuItems: DropdownItem[]) => {
+    const currentItem = menuItems[index]
     setOpenSubmenuIndex(index)
     // Only set focusedSubIndex to 0 if there are actual subitems
     if (currentItem?.subitems && currentItem.subitems.length > 0) {
@@ -167,11 +172,11 @@ export default function Dropdown({
   // Helper to get filtered subitems for the currently open submenu
   const getFilteredSubitems = useCallback(() => {
     if (openSubmenuIndex === null) return []
-    const currentItem = items[openSubmenuIndex]
+    const currentItem = itemsToShow[openSubmenuIndex]
     if (!currentItem?.subitems) return []
     if (!submenuFilterText) return currentItem.subitems
     return currentItem.subitems.filter((subitem) => subitem.text.toLowerCase().startsWith(submenuFilterText.toLowerCase()))
-  }, [items, openSubmenuIndex, submenuFilterText])
+  }, [itemsToShow, openSubmenuIndex, submenuFilterText])
 
   // Keyboard navigation handlers
   const handleVerticalNavigation = (direction: 'up' | 'down') => {
@@ -208,9 +213,9 @@ export default function Dropdown({
     if (direction === 'right') {
       // Open submenu if current item has subitems
       if (showMenu && focusedSubIndex === -1 && focusedIndex >= 0) {
-        const currentItem = items[focusedIndex]
+        const currentItem = itemsToShow[focusedIndex]
         if (currentItem?.subitems) {
-          openSubMenu(focusedIndex)
+          openSubMenu(focusedIndex, itemsToShow)
         }
       }
     } else {
@@ -234,13 +239,13 @@ export default function Dropdown({
         }
       }
     } else if (focusedIndex >= 0 && focusedIndex < itemsToShow.length) {
-      const currentItem = items[focusedIndex]
+      const currentItem = itemsToShow[focusedIndex]
       if (currentItem?.subitems) {
         // Toggle submenu
         if (openSubmenuIndex === focusedIndex) {
           closeSubMenu()
         } else {
-          openSubMenu(focusedIndex)
+          openSubMenu(focusedIndex, itemsToShow)
         }
       } else {
         handleOptionClick(itemsToShow[focusedIndex].value)
@@ -373,6 +378,7 @@ export default function Dropdown({
     value: item.value,
     subtext: item.subtext,
     keepOpen: item.keepOpen,
+    leftIcon: item.leftIcon,
     rightIcon: item.rightIcon,
     subitems: item.subitems?.map((sub) => ({
       text: sub.text,
@@ -390,7 +396,7 @@ export default function Dropdown({
         </Label>
       )}
 
-      <InputWrapper disabled={disabled} size={size} inputRef={buttonRef}>
+      <InputWrapper disabled={disabled} size={size} inputRef={buttonRef} wrapperRef={controlWrapperRef}>
         <button
           ref={buttonRef}
           id={dropdownButtonId}
@@ -417,8 +423,11 @@ export default function Dropdown({
           onClick={handleButtonClick}
           onKeyDown={handleKeyDown}
         >
-          <span className="flex-1 overflow-hidden text-start" title={longLabel.trim() || undefined}>
-            <DropdownItemLabel text={selectedText} subtext={selectedSubtext || undefined} />
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-start" title={longLabel.trim() || undefined}>
+            {selectedItem?.leftIcon && <span className="shrink-0">{selectedItem.leftIcon}</span>}
+            <span className="min-w-0 flex-1">
+              <DropdownItemLabel text={selectedText} subtext={selectedSubtext || undefined} />
+            </span>
           </span>
           <span className="pointer-events-none ms-3 flex flex-shrink-0 items-center">
             {rightIcon || <span className="material-symbols text-2xl">expand_more</span>}
@@ -441,7 +450,7 @@ export default function Dropdown({
               if (openSubmenuIndex === idx) {
                 closeSubMenu()
               } else {
-                openSubMenu(idx)
+                openSubMenu(idx, itemsToShow)
               }
             }
           } else {
@@ -466,7 +475,8 @@ export default function Dropdown({
         highlightSelected={highlightSelected}
         isItemSelected={(item) => item.value === value}
         usePortal={usePortal}
-        triggerRef={buttonRef as React.RefObject<HTMLElement>}
+        triggerRef={controlWrapperRef as React.RefObject<HTMLElement>}
+        wrapText={wrapText}
       />
     </div>
   )

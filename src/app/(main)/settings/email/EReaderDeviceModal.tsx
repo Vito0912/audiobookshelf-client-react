@@ -1,7 +1,8 @@
 'use client'
 
 import Modal from '@/components/modals/Modal'
-import Btn from '@/components/ui/Btn'
+import ModalFooter from '@/components/modals/ModalFooter'
+import ModalOuterContent from '@/components/modals/ModalOuterContent'
 import Dropdown, { DropdownItem } from '@/components/ui/Dropdown'
 import { MultiSelectItem } from '@/components/ui/MultiSelect'
 import MultiSelectDropdown from '@/components/ui/MultiSelectDropdown'
@@ -135,11 +136,7 @@ export default function EReaderDeviceModal({ isOpen, device, existingDevices, us
     })
   }
 
-  const outerContentTitle = (
-    <div className="absolute start-0 top-0 p-4">
-      <h2 className="text-xl text-white">{isEditing ? `${t('ButtonEdit')} ${t('LabelDevice')}` : t('ButtonAddDevice')}</h2>
-    </div>
-  )
+  const outerContentTitle = <ModalOuterContent>{isEditing ? t('ButtonEditDevice') : t('ButtonAddDevice')}</ModalOuterContent>
 
   return (
     <Modal isOpen={isOpen} processing={isPending} onClose={onClose} outerContent={outerContentTitle} className="w-[800px]">
@@ -188,13 +185,14 @@ export default function EReaderDeviceModal({ isOpen, device, existingDevices, us
           </div>
         </div>
 
-        <div className="border-border border-t px-4 py-3">
-          <div className="flex items-center justify-end">
-            <Btn loading={isPending} disabled={isPending} onClick={handleSubmit}>
-              {t('ButtonSubmit')}
-            </Btn>
-          </div>
-        </div>
+        <ModalFooter
+          primary={{
+            label: t('ButtonSubmit'),
+            onClick: handleSubmit,
+            loading: isPending,
+            disabled: isPending
+          }}
+        />
       </div>
     </Modal>
   )

@@ -1,8 +1,7 @@
 'use client'
 
 import { clearPodcastDownloadQueueAction } from '@/app/actions/mediaActions'
-import CoverEditModal from '@/components/modals/CoverEditModal'
-import LibraryItemEditModal from '@/components/modals/LibraryItemEditModal'
+import LibraryItemMetadataEditModal, { type MetadataEditSection } from '@/components/modals/LibraryItemMetadataEditModal'
 import AudioTracksTable from '@/components/widgets/AudioTracksTable'
 import ChaptersTable from '@/components/widgets/ChaptersTable'
 import ConfirmDialog from '@/components/widgets/ConfirmDialog'
@@ -19,11 +18,15 @@ import { useItemPageSocket } from '@/hooks/useItemPageSocket'
 import { useTypeSafeTranslations } from '@/hooks/useTypeSafeTranslations'
 import { getLibraryItemCoverUrl } from '@/lib/coverUtils'
 import { mergeLibraryItemUpdate } from '@/lib/libraryItemUpdatedUtils'
+import { computeProgress } from '@/lib/mediaProgress'
 import { BookLibraryItem, BookMetadata, PodcastEpisode, PodcastLibraryItem, PodcastMetadata } from '@/types/api'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import LibraryItemActionButtons from './LibraryItemActionButtons'
 import LibraryItemCover from './LibraryItemCover'
 import LibraryItemDetails from './LibraryItemDetails'
+import LibraryItemProgressPanel from './LibraryItemProgressPanel'
+import { useLibraryItemPagePlay } from './useLibraryItemPagePlay'
 
 interface LibraryItemClientProps {
   libraryItem: BookLibraryItem | PodcastLibraryItem
@@ -36,14 +39,14 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
   const t = useTypeSafeTranslations()
 
   const [libraryItem, setLibraryItem] = useState(initialLibraryItem)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [isCoverEditModalOpen, setIsCoverEditModalOpen] = useState(false)
+  const [metadataEditSection, setMetadataEditSection] = useState<MetadataEditSection | null>(null)
   const [isClearQueueDialogOpen, setIsClearQueueDialogOpen] = useState(false)
-  const podcastEpisodesInOrderRef = useRef<PodcastEpisode[]>([])
+  const [podcastEpisodesInOrder, setPodcastEpisodesInOrder] = useState<PodcastEpisode[]>([])
   const handlePodcastEpisodesInOrderChange = useCallback((episodes: PodcastEpisode[]) => {
-    podcastEpisodesInOrderRef.current = episodes
+    setPodcastEpisodesInOrder(episodes)
   }, [])
-  const getPodcastEpisodesInOrder = useCallback(() => podcastEpisodesInOrderRef.current, [])
+
+  const { handlePlay, showPlayButton, isItemPlaying } = useLibraryItemPagePlay({ libraryItem, podcastEpisodesInOrder })
 
   useEffect(() => {
     setLibraryItem(initialLibraryItem)
@@ -59,13 +62,17 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
   const description = 'description' in metadata ? metadata.description : undefined
 
   const userProgress = libraryItem.media?.id ? getMediaItemProgress(libraryItem.media.id) : undefined
+  const showProgressPanel = useMemo(() => {
+    if (isPodcast || !userProgress) return false
+    return computeProgress({ progress: userProgress, useSeriesProgress: false }).percent > 0
+  }, [isPodcast, userProgress])
 
-  const handleOpenEditModal = () => {
-    setIsEditModalOpen(true)
+  const handleOpenMetadataEdit = (section: MetadataEditSection) => {
+    setMetadataEditSection(section)
   }
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false)
+  const handleCloseMetadataEdit = () => {
+    setMetadataEditSection(null)
   }
 
   const handleItemUpdated = (updatedItem: BookLibraryItem | PodcastLibraryItem) => {
@@ -121,7 +128,15 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
         <div className="mx-auto w-full max-w-6xl">
           <div className="flex flex-col gap-6 md:flex-row md:gap-8">
             <div className="mx-auto flex w-full max-w-72 flex-shrink-0 items-start justify-center md:w-52 md:max-w-52 md:justify-start">
-              <LibraryItemCover libraryItem={libraryItem} canUpdate={userCanUpdate} mediaProgress={userProgress} onEdit={() => setIsCoverEditModalOpen(true)} />
+              <LibraryItemCover
+                libraryItem={libraryItem}
+                canUpdate={userCanUpdate}
+                mediaProgress={userProgress}
+                onEdit={() => handleOpenMetadataEdit('cover')}
+                showPlayButton={showPlayButton}
+                isItemPlaying={isItemPlaying}
+                onPlay={handlePlay}
+              />
             </div>
             <div className="flex-1">
               <div className="flex flex-col gap-1">
@@ -133,10 +148,10 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
                     {bookSeries.map((series, index) => {
                       return (
                         <Fragment key={series.id}>
-                          <a href={`/library/${library.id}/series/${series.id}`} className="text-foreground-muted text-lg hover:underline">
+                          <Link href={`/library/${library.id}/series/${series.id}`} className="text-foreground-muted text-lg hover:underline">
                             {series.name}
                             {series.sequence && <span className="text-foreground-muted text-lg"> #{series.sequence}</span>}
-                          </a>
+                          </Link>
                           {index < bookSeries.length - 1 && <span className="text-foreground-muted text-lg">, </span>}
                         </Fragment>
                       )
@@ -150,9 +165,9 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
                     {bookAuthors.map((author, index) => {
                       return (
                         <Fragment key={author.id}>
-                          <a href={`/library/${library.id}/authors/${author.id}`} className="text-foreground text-lg hover:underline md:text-xl">
+                          <Link href={`/library/${library.id}/authors/${author.id}`} className="text-foreground text-lg hover:underline md:text-xl">
                             {author.name}
-                          </a>
+                          </Link>
                           {index < bookAuthors.length - 1 && <span className="text-foreground text-lg md:text-xl">, </span>}
                         </Fragment>
                       )
@@ -163,14 +178,6 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
 
               <LibraryItemDetails libraryItem={libraryItem} />
 
-              <LibraryItemActionButtons
-                libraryItem={libraryItem}
-                onEdit={handleOpenEditModal}
-                onOpenCoverEdit={() => setIsCoverEditModalOpen(true)}
-                rssFeed={rssFeed ?? null}
-                getPodcastEpisodesInOrder={getPodcastEpisodesInOrder}
-              />
-
               {/* Podcast episode downloads queue */}
               {episodeDownloadsQueued.length > 0 && (
                 <div className="bg-info/40 relative mx-auto mt-4 max-w-max rounded-md px-4 py-2 text-sm font-semibold text-gray-100 md:mx-0">
@@ -179,7 +186,7 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
                     {userIsAdminOrUp && (
                       <button
                         type="button"
-                        aria-label="Clear episode download queue"
+                        aria-label={t('ButtonClear')}
                         className="material-symbols hover:text-error ml-3 cursor-pointer text-xl"
                         onClick={() => setIsClearQueueDialogOpen(true)}
                       >
@@ -196,16 +203,34 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
                   {episodesDownloading.map((episode) => (
                     <div key={episode.id} className="flex items-center">
                       <LoadingSpinner />
-                      <p className="py-1 pl-4 text-sm">{`${t('MessageDownloadingEpisode')} "${episode.episodeDisplayTitle ?? ''}"`}</p>
+                      <p className="py-1 pl-4 text-sm">{t('MessageTaskDownloadingEpisodeDescription', { 0: episode.episodeDisplayTitle ?? '' })}</p>
                     </div>
                   ))}
                 </div>
               )}
 
+              {showProgressPanel && userProgress && (
+                <LibraryItemProgressPanel
+                  libraryItem={libraryItem as BookLibraryItem}
+                  mediaProgress={userProgress}
+                  dateFormat={serverSettings?.dateFormat ?? 'MM/dd/yyyy'}
+                />
+              )}
+
+              <LibraryItemActionButtons
+                libraryItem={libraryItem}
+                onEdit={() => handleOpenMetadataEdit('details')}
+                onOpenMatch={() => handleOpenMetadataEdit('match')}
+                rssFeed={rssFeed ?? null}
+                showPlayButton={showPlayButton}
+                isItemPlaying={isItemPlaying}
+                onPlay={handlePlay}
+              />
+
               {description && <ExpandableHtml html={description} lineClamp={4} className="mt-6" />}
 
               <div className="mt-6 flex flex-col gap-4">
-                {isBookWithAudio && <ChaptersTable libraryItem={libraryItem as BookLibraryItem} />}
+                {isBookWithAudio && <ChaptersTable libraryItem={libraryItem as BookLibraryItem} onEditChapters={() => handleOpenMetadataEdit('chapters')} />}
 
                 {/* audio tracks table */}
                 {libraryItem.mediaType === 'book' && (libraryItem.media.tracks?.length ?? 0) > 0 && (
@@ -233,11 +258,15 @@ export default function LibraryItemClient({ libraryItem: initialLibraryItem }: L
           </div>
         </div>
 
-        <LibraryItemEditModal isOpen={isEditModalOpen} libraryItem={libraryItem} onClose={handleCloseEditModal} />
-        <CoverEditModal isOpen={isCoverEditModalOpen} libraryItem={libraryItem} onClose={() => setIsCoverEditModalOpen(false)} />
+        <LibraryItemMetadataEditModal
+          isOpen={metadataEditSection !== null}
+          initialSection={metadataEditSection ?? 'details'}
+          libraryItem={libraryItem}
+          onClose={handleCloseMetadataEdit}
+        />
         <ConfirmDialog
           isOpen={isClearQueueDialogOpen}
-          message="Are you sure you want to clear episode download queue?"
+          message={t('MessageConfirmClearEpisodeFetchQueue')}
           onClose={() => setIsClearQueueDialogOpen(false)}
           onConfirm={handleClearDownloadQueue}
         />
