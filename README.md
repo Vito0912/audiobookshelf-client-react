@@ -1,5 +1,7 @@
 ## NextJs client for audiobookshelf
 
+# DO NOT USE THIS IN PRODUCTION
+
 This web client is in active development and will replace the current VueJS web client.
 
 You can test using this docker image built for every commit:

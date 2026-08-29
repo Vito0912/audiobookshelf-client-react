@@ -1,8 +1,8 @@
 diff --git a/server/Server.js b/server/Server.js
-index a12f4ddd..17ce7017 100644
+index 5fac001..ec980be 100644
 --- a/server/Server.js
 +++ b/server/Server.js
-@@ -409,6 +409,48 @@ class Server {
+@@ -427,6 +427,48 @@ class Server {
        const nextApp = next({ dev: Logger.isDev, dir: ReactClientPath })
        const handle = nextApp.getRequestHandler()
        await nextApp.prepare()
@@ -48,10 +48,10 @@ index a12f4ddd..17ce7017 100644
 +        this.vueServer = http.createServer(app)
 +      }
 +
-       router.all('*', (req, res) => handle(req, res))
-     }
- 
-@@ -426,6 +469,13 @@ class Server {
+       const nextBasePath = getPreparedNextBasePath(nextApp)
+       if (nextBasePath) {
+         Logger.info(`[Server] Next client basePath is "${nextBasePath}"`)
+@@ -462,6 +504,13 @@ class Server {
        })
      }
  
@@ -66,10 +66,10 @@ index a12f4ddd..17ce7017 100644
      SocketAuthority.initialize(this)
    }
 diff --git a/server/SocketAuthority.js b/server/SocketAuthority.js
-index ad55f660..55d595f2 100644
+index a54231d..ed5f632 100644
 --- a/server/SocketAuthority.js
 +++ b/server/SocketAuthority.js
-@@ -164,6 +164,18 @@ class SocketAuthority {
+@@ -173,6 +173,18 @@ class SocketAuthority {
        this.socketIoServers.push(ioBasePathServer)
      }
  
