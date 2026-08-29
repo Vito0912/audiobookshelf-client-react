@@ -25,6 +25,14 @@ RUN pnpm run build
 
 RUN rm -rf node_modules && pnpm install --frozen-lockfile --prod
 
+### STAGE 0.5: Build legacy Vue client ###
+FROM node:20-alpine AS build-vue-client
+
+WORKDIR /client
+COPY /client /client
+RUN npm ci && npm cache clean --force
+RUN npm run generate
+
 ### STAGE 1: Build server ###
 FROM node:20-alpine AS build-server
 
@@ -80,12 +88,15 @@ COPY --from=build-client /client-react/node_modules /app/client-react/node_modul
 # placeholder (see scripts/rewriteBuildBasePath.ts).
 COPY --from=build-client /client-react/next.config.ts /app/client-react/next.config.ts
 COPY --from=build-client /client-react/scripts/rewriteBuildBasePath.ts /app/client-react/scripts/rewriteBuildBasePath.ts
+# Copy compiled legacy Vue frontend from build stage
+COPY --from=build-vue-client /client/dist /app/client/dist
 
 # Copy server from build stage
 COPY --from=build-server /server /app
 COPY --from=build-server /usr/local/lib/nusqlite3 /usr/local/lib/nusqlite3
 
 EXPOSE 80
+EXPOSE 81
 
 ENV PORT=80
 ENV NODE_ENV=production
@@ -96,6 +107,7 @@ ENV ROUTER_BASE_PATH=""
 ENV NUSQLITE3_DIR=${NUSQLITE3_DIR}
 ENV NUSQLITE3_PATH=${NUSQLITE3_PATH}
 ENV REACT_CLIENT_PATH="/app/client-react"
+ENV VUE_PORT=81
 
 ENTRYPOINT ["tini", "--"]
 CMD ["node", "index.js"]

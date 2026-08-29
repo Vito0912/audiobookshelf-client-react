@@ -1,0 +1,90 @@
+diff --git a/server/Server.js b/server/Server.js
+index a12f4ddd..17ce7017 100644
+--- a/server/Server.js
++++ b/server/Server.js
+@@ -409,6 +409,48 @@ class Server {
+       const nextApp = next({ dev: Logger.isDev, dir: ReactClientPath })
+       const handle = nextApp.getRequestHandler()
+       await nextApp.prepare()
++
++      const vuePath = Path.join(global.appRoot, '/client/dist')
++      if (await fs.pathExists(vuePath)) {
++        const vuePort = parseInt(process.env.VUE_PORT || '81')
++        Logger.info(`[Server] Serving legacy Vue client from ${vuePath} on port ${vuePort}`)
++        const vueStatic = express.static(vuePath)
++        const vueDynamicRoutes = [
++          '/item/:id',
++          '/author/:id',
++          '/audiobook/:id/chapters',
++          '/audiobook/:id/edit',
++          '/audiobook/:id/manage',
++          '/library/:library',
++          '/library/:library/search',
++          '/library/:library/bookshelf/:id?',
++          '/library/:library/authors',
++          '/library/:library/narrators',
++          '/library/:library/stats',
++          '/library/:library/series/:id?',
++          '/library/:library/podcast/search',
++          '/library/:library/podcast/latest',
++          '/library/:library/podcast/download-queue',
++          '/config/users/:id',
++          '/config/users/:id/sessions',
++          '/config/item-metadata-utils/:id',
++          '/collection/:id',
++          '/playlist/:id',
++          '/share/:slug'
++        ]
++        router.use((req, res, next) => {
++          if (req.socket?.localPort === vuePort) return vueStatic(req, res, next)
++          next()
++        })
++        vueDynamicRoutes.forEach((route) => {
++          router.get(route, (req, res, next) => {
++            if (req.socket?.localPort === vuePort) return res.sendFile(Path.join(vuePath, 'index.html'))
++            next()
++          })
++        })
++        this.vueServer = http.createServer(app)
++      }
++
+       router.all('*', (req, res) => handle(req, res))
+     }
+ 
+@@ -426,6 +469,13 @@ class Server {
+       })
+     }
+ 
++    if (this.vueServer) {
++      const vuePort = parseInt(process.env.VUE_PORT || '81')
++      this.vueServer.listen(vuePort, this.Host, () => {
++        Logger.info(`[Server] Legacy Vue client listening on port ${vuePort}`)
++      })
++    }
++
+     // Start listening for socket connections
+     SocketAuthority.initialize(this)
+   }
+diff --git a/server/SocketAuthority.js b/server/SocketAuthority.js
+index ad55f660..55d595f2 100644
+--- a/server/SocketAuthority.js
++++ b/server/SocketAuthority.js
+@@ -164,6 +164,18 @@ class SocketAuthority {
+       this.socketIoServers.push(ioBasePathServer)
+     }
+ 
++    if (Server.vueServer) {
++      const ioVueServer = new SocketIO.Server(Server.vueServer, socketIoOptions)
++      ioVueServer.path = '/socket.io'
++      this.socketIoServers.push(ioVueServer)
++      if (global.RouterBasePath) {
++        const ioVueBasePath = `${global.RouterBasePath}/socket.io`
++        const ioVueBasePathServer = new SocketIO.Server(Server.vueServer, { ...socketIoOptions, path: ioVueBasePath })
++        ioVueBasePathServer.path = ioVueBasePath
++        this.socketIoServers.push(ioVueBasePathServer)
++      }
++    }
++
+     this.socketIoServers.forEach((io) => {
+       io.on('connection', (socket) => {
+         this.clients[socket.id] = {
